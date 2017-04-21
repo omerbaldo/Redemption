@@ -1,3 +1,4 @@
+HELLO WORLD
 
 sfs_init()
     conn:
@@ -9,13 +10,15 @@ sfs_init()
     capable = 00000ffb
     want = 00000010
     context:
-    fuse = 023c4520
+    fuse = 01f16520
     uid = 0
     gid = 0
     pid = 0
-    private_data = 023c4010
-    logfile = 023c4030
+    private_data = 01f16010
+    logfile = 01f16030
     diskfile = /ilab/users/osb5/os/Project_3/assignment3/testfsfile
     umask = 00000
 
-sfs_getattr(path="/", statbuf=0x09f81c10)
+sfs_getattr(path="/", statbuf=0x5c3efc10)
+Checking if heap data retains its value
+Heap data is saved between calls

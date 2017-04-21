@@ -9,6 +9,11 @@
 #define _BLOCK_H_
 
 #define BLOCK_SIZE 512
+#define maxDiskBlocks 12
+#define amountOfINodes 500
+#define amountOfDiskBlocks 1024
+
+
 
 void disk_open(const char* diskfile_path);
 void disk_close();

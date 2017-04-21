@@ -10,13 +10,17 @@
  
      • .init : initialize file system
      • .destroy :  destroy the file system
-     • .create :    create and open a file
+     • .getattr :  get a file's information
+ 
+     • .create :   create and open a file
      • .unlink =   delete the file
-     • .getattr :   get a file's information
+    
      • .open =    Open a file.
-     • .release =Close a file.
+     • .release = Close a file.
+ 
      • .read =    Read bytes from the given file into the buffer, beginning offset bytes into the file.
      • .write =    Write bytes from the given buffer into a file.
+     
      • .readdir = Return one or more directory entries (struct dirent) to the caller.
      
      Directory Functions (extra credit):
@@ -30,7 +34,19 @@
 /**
 
 */
-    #include "params.h"
+#include "params.h"
+
+
+/**
+ 0 represents free
+ 1 represents not free
+ */
+int dataBitmap[amountOfDiskBlocks];
+int inodeBitmap[amountOfINodes];
+inode inodeTable[amountOfINodes];
+super_block superBlock;
+
+inode * root;
 
 /**
     This uses functions from block.c to
@@ -41,11 +57,9 @@
             returns 1 when block size is returned
             returns 2 wh
         4)
- 
- 
 */
-    #include "block.h"
 
+#include "block.h"
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -66,7 +80,7 @@
 #include "log.h"
 
 
-//------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------
 
 //
 // Prototypes for all these functions, and the C-style comments,
@@ -86,11 +100,41 @@
 void *sfs_init(struct fuse_conn_info *conn)
 {
     fprintf(stderr, "in bb-init\n");
+    //log_msg("HELLO WORLD\n");
     log_msg("\nsfs_init()\n");
-    
+    //printf("in init");
     log_conn(conn);
     log_fuse_context(fuse_get_context());
 
+    //Step 1) Open the disk file (file which we save everything to)
+     disk_open((SFS_DATA)->diskfile);//SFS Data is a global
+    
+    //Step 2) Set the super block
+     superBlock->s_magic = getpid();     //magic number is process number
+     superBlock->s_maxbytes =     BLOCK_SIZE * maxDiskBlock;  //6kb is max file size
+     superBlock->s_blocksize =    BLOCK_SIZE;   //512 bytes
+     superBlock->s_blocksize_bits = BLOCK_SIZE*8;
+    
+    //Step 3) Set the root directory
+     inodeTable[0].type = 'D';                                  //Directory
+     inodeTable[0].user_id = getuid();                          //User id
+     inodeTable[0].group_id = getegid();                        //Group ID
+     inodeTable[0].fileSize = 0;
+     inodeTable[0].lastAccess = time(NULL);
+     inodeTable[0].created = time(NULL);
+     inodeTable[0].modified = time(NULL);
+     inodeTable[0].block_amount = 0; //Directory
+     inodeTable[0].group_id = getegid(); //Directory
+     inodeTable[0].mode = S_IFDIR | S_IRWXU | S_IRWXG;
+     i = 0;
+     for(;i<12;i++){
+        inodeTable[0].pointers = -1;
+     }
+     inodeTable[0].directoryRow = NULL;     //directory pointer if file is directory
+     root = inodeTable[0];
+     //Name of the file
+    
+    
     return SFS_DATA;
 }
 
@@ -119,8 +163,88 @@ int sfs_getattr(const char *path, struct stat *statbuf)
     
     log_msg("\nsfs_getattr(path=\"%s\", statbuf=0x%08x)\n",
 	  path, statbuf);
+   
+    
+    if (strcmp("/",path) == 0) {//root
+
+        stat->st_dev = 0;//Device ID of device containing file.
+        stat->st_rdev = 0;//Device ID (if file is character or block special)
+        stat->st_ino = 0;//File serial number.
+        stat->st_nlink = 1;//Number of hard links to the file.
+        stat->mode = root->mode;//Mode of file. (file type and permissions)
+        stat->st_uid = root->user_id;//user id
+        stat->st_gid = root->group_id;//group id
+        
+        //time
+        stat->st_atime = root->lastAccess;
+        stat->st_mtime = root->modified;
+        stat->st_ctime = root->created;
+    } else {
+        
+    }
+
     
     return retstat;
+}
+/*
+ Given a path get the inode that represents it. 
+    return -1 on err
+ 
+ 
+ Before calling check if the path begins with a /
+    if so begin search at the root directory or inode 0
+ 
+    findINode( path without /, 0)
+ 
+ 
+ Else
+    begin search at current directory
+    findINode( path \, curr_dir)
+ 
+ 
+
+    example)
+        cat /doc/file.txt      starts search at root directory and get doc
+        cat file.txt           starts search at your current directory
+ 
+ 
+ 
+ 
+*/
+int findINode(const char *path, int currentLocation){
+    int i, len = 0;
+    char * c;
+    
+    len = strlen(path);
+    
+    for(i = 0; i < len; i++) {
+        c = *path[i];
+        
+        if(c == '/'){
+            char[] subPath;
+            
+            
+        }
+    }
+    
+    
+    /**
+                                                            1
+     for each character in path                             photos/water.jpg
+        if there is a slash
+            substring = get the substring up to that slash  photos
+            check if it exists in parent dir
+                findINode(less of a path, and inode)        findINode(water.jpg,1)
+     
+    
+     if it gets here there is no slash
+        check if it is in parentDirectory
+            return i node number
+        else
+            return -1
+     
+     */
+    
 }
 
 /**
@@ -221,7 +345,6 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 }
 
 /** Write data to an open file
- *
  * Write should return exactly the number of bytes requested
  * except on error.  An exception to this is when the 'direct_io'
  * mount option is specified (see read operation).
@@ -326,15 +449,34 @@ int sfs_releasedir(const char *path, struct fuse_file_info *fi)
 struct fuse_operations sfs_oper = {
   .init = sfs_init,
   .destroy = sfs_destroy,
-
   .getattr = sfs_getattr,
+
+    //terence
+   .open = sfs_open,
+   .release = sfs_release,
+
+    //kwabe
   .create = sfs_create,
   .unlink = sfs_unlink,
-  .open = sfs_open,
-  .release = sfs_release,
+    
+    //omer
   .read = sfs_read,
   .write = sfs_write,
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
+    
+    
   .rmdir = sfs_rmdir,
   .mkdir = sfs_mkdir,
 
@@ -353,8 +495,6 @@ void sfs_usage()
 
 /**
     Hand over control to FUSE library using arguements
- 
- 
 */
 int main(int argc, char *argv[])
 {
