@@ -102,43 +102,43 @@ void *sfs_init(struct fuse_conn_info *conn)
     log_msg("\nsfs_init()\n");
     
     //Step 0) Create connection
-    log_conn(conn);
-    log_fuse_context(fuse_get_context());
+        log_conn(conn);
+        log_fuse_context(fuse_get_context());
     
     //Step 1) Open the disk file (file which we save everything to)
-    disk_open((SFS_DATA)->diskfile);//SFS Data is a global
+        disk_open((SFS_DATA)->diskfile);//SFS Data is a global
     
     //Step 2) Set the super block
-    superBlock.s_magic = getpid();     //magic number is process number
-    superBlock.s_maxbytes =  BLOCK_SIZE * maxDiskBlocks;  //6kb is max file size
-    superBlock.s_blocksize = BLOCK_SIZE;   //512 bytes
+        superBlock.s_magic = getpid();     //magic number is process number
+        superBlock.s_maxbytes =  BLOCK_SIZE * maxDiskBlocks;  //6kb is max file size
+        superBlock.s_blocksize = BLOCK_SIZE;   //512 bytes
     
     //e superBlock.s_blocksize_bits = (long)(BLOCK_SIZE*8);
     
     //Step 3) Set the root directory
-    inodeTable[0].type = 'D';                                  //Directory
-    inodeTable[0].user_id = getuid();                          //User id
-    inodeTable[0].group_id = getegid();                        //Group ID
-    inodeTable[0].fileSize = 0;
-    inodeTable[0].lastAccess = time(NULL);
-    inodeTable[0].created = time(NULL);
-    inodeTable[0].modified = time(NULL);
-    inodeTable[0].block_amount = 0; //Directory
-    inodeTable[0].group_id = getegid(); //Directory
-    inodeTable[0].mode = S_IFDIR | S_IRWXU | S_IRWXG;
-    inodeBitmap[0] = 1;//not free
-    
-    //Step 4) Null out all the pointers for each inode
-    int i = 0;
-    for(;i<amountOfINodes;i++){
-        int j = 0;
-        for(;i<12;i++){
-            inodeTable[i].pointers[j] = -1;
+        inodeTable[0].type = 'D';                                  //Directory
+        inodeTable[0].user_id = getuid();                          //User id
+        inodeTable[0].group_id = getegid();                        //Group ID
+        inodeTable[0].fileSize = 0;
+        inodeTable[0].lastAccess = time(NULL);
+        inodeTable[0].created = time(NULL);
+        inodeTable[0].modified = time(NULL);
+        inodeTable[0].block_amount = 0; //Directory
+        inodeTable[0].group_id = getegid(); //Directory
+        inodeTable[0].mode = S_IFDIR | S_IRWXU | S_IRWXG;
+        inodeBitmap[0] = 1;//not free
+        
+        //Step 4) Null out all the pointers for each inode
+        int i = 0;
+        for(;i<amountOfINodes;i++){
+            int j = 0;
+            for(;i<12;i++){
+                inodeTable[i].pointers[j] = -1;
+            }
         }
-    }
     //Step 5) Set root pointer, and make the pointer to its directory (for now) be null.
-    inodeTable[0].dir = NULL;     //directory pointer if file is directory
-    root = &inodeTable[0];
+        inodeTable[0].dir = NULL;     //directory pointer if file is directory
+        root = &inodeTable[0];
     
     return SFS_DATA;
 }
@@ -150,6 +150,7 @@ void *sfs_init(struct fuse_conn_info *conn)
  */
 void sfs_destroy(void *userdata)
 {
+    
     log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
 }
 
@@ -212,7 +213,7 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         statbuf->st_ctime = node->created;
     }
     
-    return retstat;
+    return retstat;//0
 }
 /*
  Given a path get the inode that represents it.
@@ -359,6 +360,19 @@ int sfs_unlink(const char *path)
  * which will be passed to all file operations.
  *
  * Changed in version 2.2
+ 
+ 
+ 
+ 
+ 
+ 
+ Path indicates the name of the file. 
+ The flag argument indicates whether the file
+        is to be read, written, or “updated” (read and written simultaneously)
+ The returned value filep is called a file descriptor. 
+ It is a small integer used to identify the file in subsequent calls
+ to read, write, or otherwise manipulate it. (return i-node # as fd)
+ 
  */
 int sfs_open(const char *path, struct fuse_file_info *fi)
 {
@@ -404,6 +418,30 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
  * this operation.
  *
  * Changed in version 2.2
+ 
+ Arguements)
+ 
+    const char *path path of file
+    char *buf is where we will read the bytes into 
+    size is size of bytes we are reading
+    offset is where to start reading
+    fi is a struct that gives us information about open files. in it we have the following fields
+        (int)fh for file handle. this is filled out by open 
+        (int)flags  flags.
+ 
+ 
+ Algorithm)
+    open() recursively finds the file and allocates a file descriptor for something to read.
+    get the current file open (from file descriptor) 
+ 
+    begin reading into the buff.
+        start at a certain point. keep going. if you run out of space stop reading at curr block and go to new block
+ 
+ 
+ error) try to read too much bytes
+ 
+ int block_read(const int block_num, void *buf);
+
  */
 int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
@@ -411,9 +449,85 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
     log_msg("\nsfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
             path, buf, size, offset, fi);
     
+    int fileDescriptor = fi->fh;                            // file descriptor or inode #
+    inode * currFile = &inodeTable[fileDescriptor];          // current inode for open file
     
-    return retstat;
+
+    //Step 1) Set variables
+    
+        int diskfile = getDiskFile();
+    
+        int currDiskBlockIndex = ((int)offset/(int)BLOCK_SIZE);   //ex. trunc(1000/512) means start at index 1
+                                                                 //(first block that current thread owns)
+    
+        int currDiskBlock = currFile->pointers[currDiskBlockIndex];  // what block to start out at in pointer list. ex 1000/512
+                                                    //  will tell you to start at block 1
+    
+        int byteOffset = offset % BLOCK_SIZE;      //   this is where to start in that block
+    
+        int numberOfBytesRead = 0;                //    number of bytes read in
+    
+        int numberOfBytesRemaining = size;       //     number of bytes read in
+
+        int sizeBetween = 0;
+    
+        int buffOffset = 0;
+    
+    //Step 2) Read bytes in so long as their less than the size of the file
+        while(numberOfBytesRead < size){
+            sizeBetween = BLOCK_SIZE - byteOffset;          //number of bytes between offset and end of block
+
+            if(sizeBetween < numberOfBytesRemaining){       //need to read all the memory in this block and move onto the next one
+                
+                /**
+                 Write to the buffer from the diskfile
+                */
+                pwrite(diskfile, buf+buffOffset, sizeBetween, currDiskBlock*BLOCK_SIZE);
+  
+                /**
+                 Book Keeping                
+                 */
+                buffOffset+= sizeBetween; //next time you write, write from the offset on buffer
+                numberOfBytesRemaining -= sizeBetween; //how much bytes we read to the end of the block
+                byteOffset = 0;//start reading bytes from 0
+                
+                /**
+                 Get the next disk block that the inode owns
+                */
+                currDiskBlockIndex++;
+                currDiskBlock = currFile->pointers[currDiskBlockIndex];
+                
+                numberOfBytesRead+=sizeBetween;
+                
+            }else if(sizeBetween >= numberOfBytesRemaining){ //need to read numberOfBytesRemaining into the buffer
+                
+                pwrite(diskfile, buf+buffOffset, numberOfBytesRemaining, currDiskBlock*BLOCK_SIZE);
+                numberOfBytesRead+=numberOfBytesRemaining;
+                
+                break;
+            }
+        }
+    
+    return numberOfBytesRead;
 }
+/**
+ This func essentially emulates 
+ 
+    size_t pread(int fd, void *buf, size_t count, off_t offset);
+
+    fd is the file descriptor of the file 
+    buff is the buffer 
+    count is how much you want to read in
+    offset is basically the offset from the beginning of the file.
+*/
+
+
+
+
+
+
+
+
 
 /** Write data to an open file
  * Write should return exactly the number of bytes requested
@@ -421,6 +535,12 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
  * mount option is specified (see read operation).
  *
  * Changed in version 2.2
+ 
+ 
+ 
+ 
+ buf is your buffer
+ size is how
  */
 int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
               struct fuse_file_info *fi)

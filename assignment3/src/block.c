@@ -16,6 +16,10 @@
 
 int diskfile = -1;
 
+int getDiskFile(){
+    return diskfile;
+}
+
 void disk_open(const char* diskfile_path)
 {
     if(diskfile >= 0){
