@@ -47,7 +47,7 @@ inode inodeTable[amountOfINodes];
 super_block superBlock;
 
 inode * root;
-
+static int currentDirectory = 0;
 /**
     This uses functions from block.c to
  
@@ -160,6 +160,7 @@ int sfs_getattr(const char *path, struct stat *statbuf)
 {
     int retstat = 0;
     char fpath[PATH_MAX];
+    inode * node;
     
     log_msg("\nsfs_getattr(path=\"%s\", statbuf=0x%08x)\n",
 	  path, statbuf);
@@ -174,13 +175,39 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         stat->mode = root->mode;//Mode of file. (file type and permissions)
         stat->st_uid = root->user_id;//user id
         stat->st_gid = root->group_id;//group id
+        stat->st_size = root->fileSize; //file size
+        stat->st_blocks = root->block_amount; //number of blocks allocated for this file
         
         //time
         stat->st_atime = root->lastAccess;
         stat->st_mtime = root->modified;
         stat->st_ctime = root->created;
+
     } else {
+        int result = findINode(path, currentDirectory);
+
+        if (result == -1) {
+            printf("Error path does not exist\n");
+            return;
+        }
+
+        node = inodeTable[result];
+
+        stat->st_dev = 0;//Device ID of device containing file.
+        stat->st_rdev = 0;//Device ID (if file is character or block special)
+        stat->st_ino = 0;//File serial number.
+        stat->st_nlink = 1;//Number of hard links to the file.
+        stat->mode = node->mode;//Mode of file. (file type and permissions)
+        stat->st_uid = node->user_id;//user id
+        stat->st_gid = node->group_id;//group id
+        stat->st_size = node->fileSize; //file size
+        stat->st_blocks = node->block_amount; //number of blocks allocated for this file
         
+        //time
+        stat->st_atime = node->lastAccess;
+        stat->st_mtime = node->modified;
+        stat->st_ctime = node->created;
+
     }
 
     
