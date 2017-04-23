@@ -477,12 +477,21 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
         while(numberOfBytesRead < size){
             sizeBetween = BLOCK_SIZE - byteOffset;          //number of bytes between offset and end of block
 
+            if(currDiskBlockIndex>=12){
+                return numberOfBytesRead;
+            }
+            //check if the current disk block is -1. means nothing else to read
+            if(currDiskBlock == -1){
+                return numberOfBytesRead;
+            }
+        
+            
             if(sizeBetween < numberOfBytesRemaining){       //need to read all the memory in this block and move onto the next one
                 
                 /**
                  Write to the buffer from the diskfile
                 */
-                pwrite(diskfile, buf+buffOffset, sizeBetween, currDiskBlock*BLOCK_SIZE);
+                pread(diskfile, buf+buffOffset, sizeBetween, currDiskBlock*BLOCK_SIZE);
   
                 /**
                  Book Keeping                
@@ -501,7 +510,7 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
                 
             }else if(sizeBetween >= numberOfBytesRemaining){ //need to read numberOfBytesRemaining into the buffer
                 
-                pwrite(diskfile, buf+buffOffset, numberOfBytesRemaining, currDiskBlock*BLOCK_SIZE);
+                pread(diskfile, buf+buffOffset, numberOfBytesRemaining, currDiskBlock*BLOCK_SIZE);
                 numberOfBytesRead+=numberOfBytesRemaining;
                 
                 break;
@@ -525,7 +534,16 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 
 
 
-
+int getFreeBlock(){
+    int i = 0;
+    for(;i<maxDiskBlocks;i++){
+        if(dataBitmap[i] == 0){
+            dataBitmap[i] == 1;
+            return i;
+        }
+    }
+    return -1;//full
+}
 
 
 
@@ -549,9 +567,88 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
     log_msg("\nsfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
             path, buf, size, offset, fi);
     
+    int fileDescriptor = fi->fh;                              // file descriptor or inode #
+    inode * currFile = &inodeTable[fileDescriptor];          // current inode for open file
     
-    return retstat;
+    
+    //Step 1) Set variables
+    
+    int diskfile = getDiskFile();
+    
+    int currDiskBlockIndex = ((int)offset/(int)BLOCK_SIZE);   //ex. trunc(1000/512) means start at index 1
+    //(first block that current thread owns)
+    
+    int currDiskBlock = currFile->pointers[currDiskBlockIndex];  // what block to start out at in pointer list. ex 1000/512
+    //  will tell you to start at block 1
+    
+    int byteOffset = offset % BLOCK_SIZE;      //   this is where to start in that block
+    
+    int numberOfBytesWritten = 0;                //    number of bytes read in
+    
+    int numberOfBytesRemaining = size;       //     number of bytes read in
+    
+    int sizeBetween = 0;
+    
+    int buffOffset = 0;
+    
+    //Step 2) Read bytes in so long as their less than the size of the file
+    while(numberOfBytesWritten < size){
+        sizeBetween = BLOCK_SIZE - byteOffset;          //number of bytes between offset and end of block
+        
+        //check if current disk block is out of bounds. if so it cant write everything (file is too big)
+        
+        if(currDiskBlockIndex>=12){
+            return numberOfBytesWritten;
+        }
+        //check if the current disk block is -1. if so then we have to find a free block
+        if(currDiskBlock == -1){
+            int currDiskBlock = getFreeBlock();
+            currFile->pointers[currDiskBlockIndex] = currDiskBlock;
+        }
+        
+        if(sizeBetween < numberOfBytesRemaining){       //need to read all the memory in this block and move onto the next one
+            
+            /**
+              the buffer from the diskfile
+             */
+            pwrite(diskfile, buf+buffOffset, sizeBetween, currDiskBlock*BLOCK_SIZE);
+            
+            /**
+             Book Keeping
+             */
+            buffOffset+= sizeBetween; //next time you write, write from the offset on buffer
+            numberOfBytesRemaining -= sizeBetween; //how much bytes we read to the end of the block
+            byteOffset = 0;//start reading bytes from 0
+            
+            /**
+             Get the next disk block that the inode owns
+             */
+            currDiskBlockIndex++;
+            currDiskBlock = currFile->pointers[currDiskBlockIndex];
+            
+            numberOfBytesWritten+=sizeBetween;
+            
+        }else if(sizeBetween >= numberOfBytesRemaining){ //need to read numberOfBytesRemaining into the buffer
+            
+            pwrite(diskfile, buf+buffOffset, numberOfBytesRemaining, currDiskBlock*BLOCK_SIZE);
+            numberOfBytesWritten+=numberOfBytesRemaining;
+            
+            break;
+        }
+    }
+    
+    return numberOfBytesWritten;
 }
+
+
+
+
+
+
+
+
+
+
 
 
 /** Create a directory */
