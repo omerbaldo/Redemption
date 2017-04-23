@@ -36,12 +36,13 @@ struct sfs_state {
  offset
  */
 
-
-
-
-
-
-
+typedef struct directoryRow{
+    int inodeNumber;
+    struct directoryRow * next;
+    char fileName[400];
+    int lengthOfFileName;
+    
+}directoryRow;
 
 typedef struct inode{
     char type;              //type. directory or file               1
@@ -64,16 +65,6 @@ typedef struct super_block {
     unsigned long  s_blocksize;         /* block size in bytes 512  */
     unsigned char s_blocksize_bits;     /* block size in bits 512*8 */
 }super_block;
-
-typedef struct directoryRow{
-    int inodeNumber;
-    struct directoryRow * next;
-    char[400] fileName;
-    int lengthOfFileName;
-    
-}directoryRow;
-
-
 
 #define SFS_DATA ((struct sfs_state *) fuse_get_context()->private_data)
 
