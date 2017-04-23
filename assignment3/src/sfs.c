@@ -214,17 +214,44 @@ int sfs_getattr(const char *path, struct stat *statbuf)
 int findINode(const char *path, int currentLocation){
     int i, len = 0;
     char * c;
-    
+    int result = -1;
+    char temp_path[len];
+    char current_file[len];
+
+
+    //length of current path
     len = strlen(path);
     
     for(i = 0; i < len; i++) {
         c = *path[i];
         
-        if(c == '/'){
-            char[] subPath;
-            
-            
+       
+        if(c == '/') {
+
+            //copy path name up until the slash and go search for that directory
+            //in the current folder
+            strncpy(path, current_file, i);
+            int new_location = findchild(currentLocation, current_file);
+
+            //if directory does not exist in the current folder
+            if(new_location == -1) {
+                printf("Error path does not exist\n");
+                return;
+            }
+
+            //else keep on recursing on the shortened path name
+            strcpy(path+(i+1) ,temp_path);
+            result = findINode(temp_path, new_location);
+            break; 
         }
+
+        //end of the path name reached
+        //search for the file in the current directory
+        if(c == '\0') {
+            result = findchild(currentLocation, path);
+            break;
+        }
+
     }
     
     
@@ -244,7 +271,28 @@ int findINode(const char *path, int currentLocation){
             return -1
      
      */
+
+
+    return result;
     
+}
+
+
+int findchild (const int current_dir, String child) {
+    /*
+    get current directory's files and loop until 
+    you find the file or directory name that matches the child name
+    */
+    directoryRow * curr = inodeTable[current_dir].dir;
+
+    while (curr != NULL) {
+        if (strcmp(curr->fileName, child) == 0)
+            return curr->inodeNumber;
+        curr = curr->next;
+    }
+
+
+    return -1;
 }
 
 /**
