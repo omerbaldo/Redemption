@@ -7,7 +7,6 @@
  There are a couple of symbols that need to be #defined before
  #including all the headers.
  */
-
 #ifndef _PARAMS_H_
 #define _PARAMS_H_
 
@@ -36,14 +35,41 @@ struct sfs_state {
  offset
  */
 
+
+
 typedef struct directoryRow{
-    int inodeNumber;
-    struct directoryRow * next;
-    char fileName[400];
-    int lengthOfFileName;
-    
+    int inodeNumber;//-1 if it is free. otherwise inode# of directory
+    char fileName[10];
 }directoryRow;
 
+/*
+Description:
+ Directory that can allow up to 31 files to be saved to it.
+ If more files are needed we can use the indirection
+Length:
+ 504 bytes in length
+**/
+typedef struct directory{
+    directoryRow table[31];
+    struct directory* indirect;
+}directory;
+
+/*
+ Description:
+    I node. about 4 of these fit in each 512 block. To support one file of 
+    16Mb or (16*10^6 bytes) we need about 31250 disk blocks for this. 
+ 
+ 
+    31250/12 means we need 2605 inodes to represent this 
+ 
+    So we need a max of 2606 Inodes.
+ 
+ 
+ -------------------------------------------------------------------------
+ Length:
+    128 bytes
+ 
+ **/
 typedef struct inode{
     char type;              //type. directory or file               1
     uid_t user_id;          //User ID  Number                       4
@@ -57,9 +83,15 @@ typedef struct inode{
     directoryRow * dir;     //directory pointer if file is directory
     mode_t mode;
     //file owns
+    int inode_number;
+    char buffer[4];
 }inode;
 
+/*
+ 50 bytes
+ */
 typedef struct super_block {
+    int init;                           //has the file system been initialized before ?
     unsigned long  s_magic;             /* filesystem's magic number*/
     unsigned long long  s_maxbytes;     /* max file size 6kb        */
     unsigned long  s_blocksize;         /* block size in bytes 512  */
