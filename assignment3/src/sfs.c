@@ -336,10 +336,37 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     int retstat = 0;
     log_msg("\nsfs_create(path=\"%s\", mode=0%03o, fi=0x%08x)\n",
             path, mode, fi);
-    
-    
-    return retstat;
+
+    //Step 0) Check if inode for file trying to be created exists
+    int result = findINode(path, currentDirectory);
+
+    //Step 1) If it doesn't exist find empty inode in bitmap and give inode in table correct properties
+        if (result == -1) {
+            printf("path does not exist. Create that junk\n");
+
+            int i = 0;
+            for( ;i < amountOfINodes; i++){
+                if (inodeBitmap[i] == 0){
+                    inodeTable[i].type = 'F';                                  //File
+                    inodeTable[i].user_id = getuid();                          //User id
+                    inodeTable[i].group_id = getegid();                        //Group ID
+                    inodeTable[i].fileSize = 0;
+                    inodeTable[i].lastAccess = time(NULL);
+                    inodeTable[i].created = time(NULL);
+                    inodeTable[i].modified = time(NULL);
+                    inodeTable[i].block_amount = 0; 
+                    inodeTable[i].group_id = getegid(); 
+                    inodeTable[i].mode = S_IFDIR | S_IRWXU | S_IRWXG;
+                    inodeBitmap[i] = 1;//not free
+                    return 0;
+                }
+            }
+        }
+
+    //Step 2) If it does exist just return -1
+    return -1;
 }
+
 
 /** Remove a file */
 int sfs_unlink(const char *path)
@@ -348,7 +375,23 @@ int sfs_unlink(const char *path)
     log_msg("sfs_unlink(path=\"%s\")\n", path);
     
     
-    return retstat;
+    //Step 0) Check if inode for file trying to be deleted exists
+    int result = findINode(path, currentDirectory);
+
+    //Step 1) If it doesn't exist just return -1
+    if (result == -1) {
+        printf("path does not exist. Cannot delete\n");
+        return -1;
+    }
+
+    //Step 2) If it does exist set inode bitmap to 0
+    inodeBitmap[result] = 0;//not free
+    int j = 0;
+    for(;i<12;i++){
+        inodeTable[result].pointers[j] = -1;
+    }
+    return 0;
+   
 }
 
 /** File open operation
