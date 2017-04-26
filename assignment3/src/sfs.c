@@ -364,6 +364,7 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
         }
 
     //Step 2) If it does exist just return -1
+    printf("File Already exists\n");
     return -1;
 }
 
@@ -390,6 +391,7 @@ int sfs_unlink(const char *path)
     for(;i<12;i++){
         inodeTable[result].pointers[j] = -1;
     }
+
     return 0;
    
 }
@@ -425,15 +427,15 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
     log_msg("\nsfs_open(path\"%s\", fi=0x%08x)\n",
             path, fi);
     
-    //returns file descriptor associated with opening the file
-   fd = open (path, fi->flags);
+    //set fd to inode # associated with the file
+   fd = findINode(path, currentDirectory);
 
    if (fd == -1) {
         printf("Error opening file\n");
         return -1;
    }
 
-   //fill in file handler from fd returned from open
+   //set file descriptor to inode #
    fi->fh = fd;
 
     return retstat;
