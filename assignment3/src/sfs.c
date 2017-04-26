@@ -262,7 +262,7 @@ int findINode(const char *path, int currentLocation){
             //if directory does not exist in the current folder
             if(new_location == -1) {
                 printf("Error path does not exist\n");
-                return;
+                return -1;
             }
             
             //else keep on recursing on the shortened path name
@@ -420,10 +420,22 @@ int sfs_unlink(const char *path)
 int sfs_open(const char *path, struct fuse_file_info *fi)
 {
     int retstat = 0;
+    int fd;
+
     log_msg("\nsfs_open(path\"%s\", fi=0x%08x)\n",
             path, fi);
     
-    
+    //returns file descriptor associated with opening the file
+   fd = open (path, fi->flags);
+
+   if (fd == -1) {
+        printf("Error opening file\n");
+        return -1;
+   }
+
+   //fill in file handler from fd returned from open
+   fi->fh = fd;
+
     return retstat;
 }
 
@@ -447,7 +459,16 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
     log_msg("\nsfs_release(path=\"%s\", fi=0x%08x)\n",
             path, fi);
     
+    int result;
     
+    //closes file descriptor
+    result = close(fi->fh);
+
+    if (result == -1) {
+        printf("Error closing file descriptor\n");
+        return -1;
+    }
+
     return retstat;
 }
 
