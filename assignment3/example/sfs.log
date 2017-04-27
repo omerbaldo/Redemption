@@ -36,11 +36,12 @@ sfs_getattr(path="/bbb.b", statbuf=0x64801c40)
 
 sfs_getattr(path="/", statbuf=0x5fffec10)
 
-sfs_getattr(path="/bbb.b", statbuf=0x64801c40)
+sfs_getattr(path="/", statbuf=0x12151c10)
 
-sfs_getattr(path="/bbb.b", statbuf=0x5fffec40)
+sfs_getattr(path="/", statbuf=0x12952c10)
 
-sfs_getattr(path="/", statbuf=0x64801c10)
+sfs_opendir(path="/", fi=0x12151c30)
+uf=0x64801c10)
 
 sfs_getattr(path="/bbb.b", statbuf=0x5fffec40)
 

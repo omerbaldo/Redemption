@@ -110,7 +110,8 @@ void *sfs_init(struct fuse_conn_info *conn)
   
   	//Step 1) Check if this file system has been initialized before
   
-  			int bytesRead = pread(diskFileHandle, superBlock, sizeof(super_block), 0);
+            void * ptr = (void *)&superBlock;
+  			int bytesRead = pread(diskFileHandle, ptr, sizeof(super_block), 0);
                                                                        //try to read in bytes into super block
 
  				if (bytesRead != sizeof(super_block)){												 //hasn't been initiliazed
@@ -132,11 +133,10 @@ void *sfs_init(struct fuse_conn_info *conn)
                   inodeTable[0].block_amount = 0; 										 //Directory has no blocks
                   inodeTable[0].group_id = getegid(); 								//Permissions 
                   inodeTable[0].mode = S_IFDIR | S_IRWXU | S_IRWXG;
-          				inodeTable[0].directory = rootDir;      
           				  //First entry in a directory table is i
           					rootDir.table[0].inodeNumber = 0;
-                  	rootDir.table[0].fileName[0] = '.';
-                  	rootDir.table[0].fileName[1] = '\0';
+                            rootDir.table[0].fileName[0] = '.';
+                            rootDir.table[0].fileName[1] = '\0';
 
                   inodeBitmap[0] = 1;//not free
 
@@ -149,21 +149,28 @@ void *sfs_init(struct fuse_conn_info *conn)
                       }
                   }
                   //Step 5) Set root pointer, and make the pointer to its directory
-                  inodeTable[0].dir = rootDir;     //directory pointer if file is directory
+                  inodeTable[0].dir = &rootDir;     //directory pointer if file is directory
                   root = &inodeTable[0];
           	
           }else{
                 //Step 1) Read the root directory struct at block 1
-                pread(diskFileHandle, rootDir, sizeof(directory), 1*BLOCK_SIZE);
+              
+              void * ptr = (void *) &rootDir;
+              
+                pread(diskFileHandle, ptr, sizeof(directory), 1*BLOCK_SIZE);
 
+              ptr = (void *) &inodeBitmap;
                 //Step 3) Read the inode bit map array in at block 2
-                pread(diskFileHandle, inodeBitmap, sizeof(inodeBitmap), 2*BLOCK_SIZE);
+                pread(diskFileHandle, ptr, sizeof(inodeBitmap), 2*BLOCK_SIZE);
 
+               ptr = (void *) &dataBitmap;
                 //Step 4) Read the disk bit map array at block 8
-                pread(diskFileHandle, dataBitmap, sizeof(dataBitmap), 8*BLOCK_SIZE);
+                pread(diskFileHandle, ptr, sizeof(dataBitmap), 8*BLOCK_SIZE);
+
+              ptr = (void *) &inodeTable;
 
                 //Step 5) Read the inodes at block 722
-                pread(diskFileHandle, inodeTable, sizeof(inodeTable), 70*BLOCK_SIZE);
+                pread(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
           }
           
     
@@ -181,22 +188,25 @@ void sfs_destroy(void *userdata)
   
   //file handle for the disk file 
   int diskFileHandle = getDiskFile();
-
-  //Step 1) Write superblock at offset 0 or block 0
-  pwrite(diskFileHandle, superBlock, sizeof(super_block), 0);
-  
-  //Step 2) Write the root directory struct at block 1
-  pwrite(diskFileHandle, rootDir, sizeof(directory), 1*BLOCK_SIZE);
-  
-	//Step 3) Write the inode bit map in at block 2
-  pwrite(diskFileHandle, inodeBitmap, sizeof(inodeBitmap), 2*BLOCK_SIZE);
-  
-	//Step 4)  Write the disk bit map at block 8
-  pwrite(diskFileHandle, dataBitmap, sizeof(dataBitmap), 8*BLOCK_SIZE);
-
-  //Step 5)  Write the inodes at block 722
-  pwrite(diskFileHandle, inodeTable, sizeof(inodeTable), 70*BLOCK_SIZE);
     
+    
+
+    void * ptr = (void *) &rootDir;
+    
+    pwrite(diskFileHandle, ptr, sizeof(directory), 1*BLOCK_SIZE);
+    
+    ptr = (void *) &inodeBitmap;
+    //Step 3) Read the inode bit map array in at block 2
+    pwrite(diskFileHandle, ptr, sizeof(inodeBitmap), 2*BLOCK_SIZE);
+    
+    ptr = (void *) &dataBitmap;
+    //Step 4) Read the disk bit map array at block 8
+    pwrite(diskFileHandle, ptr, sizeof(dataBitmap), 8*BLOCK_SIZE);
+    
+    ptr = (void *) &inodeTable;
+    
+    //Step 5) Read the inodes at block 722
+    pwrite(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
   log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
 }
 
@@ -357,18 +367,18 @@ int findchild (const int current_dir, char * child) {
      you find the file or directory name that matches the child name
      */
   	int i = 0;
-  	directory curr;
+  	
     
   	if (inodeTable[current_dir].type != 'D') {
     	printf("Error: Folder does not exist\n");
       return -1;
   	}
   
-  	curr = inodeTable[current_dir].dir;
+  	directory * curr = inodeTable[current_dir].dir;
   
   	for (; i < 31; i++) {
-    		if ( strcmp(child, curr.table[i].filename) == 0)
-           return curr.table[i].inodeNumber;
+    		if ( strcmp(child, curr->table[i].fileName) == 0)
+           return curr->table[i].inodeNumber;
   	}
     
     return -1;
@@ -443,7 +453,7 @@ int sfs_unlink(const char *path)
     //Step 2) If it does exist set inode bitmap to 0
     inodeBitmap[result] = 0;//not free
     int j = 0;
-    for(;i<12;i++){
+    for(;j<12;j++){
         inodeTable[result].pointers[j] = -1;
     }
 
@@ -479,24 +489,20 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
     
     //set fd to inode # associated with the file
    fd = findINode(path, currentDirectory);
-   int groupId = getegid();
-   int userId = getuid();
- 	 if(inodeTable[fd].group_id != groupID || inodeTable[fd].user_id != userId){
-    //do not have permissions
-     printf("You do not have group or user permissions to open this file\n");
-
-     return -1;
- 	 }
+   int groupIdCurrrently = getegid();
+   int userIdCurrrently = getuid();
+    
+    if(inodeTable[fd].group_id != groupIdCurrrently || inodeTable[fd].user_id != userIdCurrrently){
+        //do not have permissions
+        printf("You do not have group or user permissions to open this file\n");
+        return -1;
+    }
   
-  
-
    if (fd == -1) {
         printf("Error opening file\n");
         return -1;
    }
-
-   //set file descriptor to inode #
-   fi->fh = fd;
+    fi->fh = fd;    //set file descriptor to inode #
 
   return retstat;
 }
@@ -786,25 +792,70 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
  * '1'.
  *
  * Introduced in version 2.3
+ 
+ Return one or more directory entries (struct dirent) to the call
+ 
+ Args:
+    path:    what folder to open
+    buf:     holds dirent structs
+    filler:  insert directory entries into the directory structure, 
+             which is also passed to your callback as buf.
+    offset:  ignore this
+    fi:      ignore this too
+ 
+ 
+ 
+ https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/html/unclear.html
+ 
+ 
+ 
  */
 int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
                 struct fuse_file_info *fi)
 {
     int retstat = 0;
     
+    //Fill out a dirent linked list structure.
+/*
+     struct dirent {
+        ino_t          d_ino;        inode number
+        off_t          d_off;        offset to the next dirent
+        unsigned short d_reclen;     length of this record
+        unsigned char  d_type;       type of file; not supported
+                                     by all file system types
+        char           d_name[256];
+    };
+     
+     
+     Algo:
+        get all the elements of the directory 
+        fill out information about them in the dirent struct (just the name)
+     
+*/
+    int currDirInode = findINode(path,0);
+    int i = 0;
+    struct inode * currdirectoryInode = &inodeTable[currDirInode];
+    directory * currdirectory = currdirectoryInode->dir;
+    struct dirent temp;
+    int inodenum = 0;
     
+    
+    for(;i<31;i++){
+        if(currdirectory->table[i].inodeNumber != -1){//directory element
+            
+            
+            
+            memcpy(temp.d_name,currdirectory->table[i].fileName, 10);
+            temp.d_ino = currdirectory->table[i].inodeNumber;           //inode #
+            
+            //buffer, dirent, pointer to struct stat or null, offset to next directory entry
+            if(filler(buf, temp.d_name, NULL, 0)!= 0){
+                retstat = -ENOMEM;
+            }
+        }
+    }
     return retstat;
 }
-
-
-
-
-
-
-
-
-
-
 
 /** Create a directory */
 int sfs_mkdir(const char *path, mode_t mode)
@@ -871,8 +922,7 @@ struct fuse_operations sfs_oper = {
     
     //kwabe
     .create = sfs_create,
-    .unlink = 
-      ,
+    .unlink = sfs_unlink,
     
     //omer
     .read = sfs_read,

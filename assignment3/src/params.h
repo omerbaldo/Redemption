@@ -80,7 +80,7 @@ typedef struct inode{
     time_t modified;        //When was it last modified             4
     int block_amount;       //amount of blocks it owns              4
     int pointers[12];       //pointers to blocks the                32
-    directory dir;		      //directory pointer if file is directory
+    directory * dir;		//directory pointer if file is directory
     mode_t mode;
     //file owns
     int inode_number;
