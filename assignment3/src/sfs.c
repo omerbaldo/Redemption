@@ -50,11 +50,12 @@ Directory Functions (extra credit):
  0 represents free
  1 represents not free
  */
-int dataBitmap[amountOfDiskBlocks];
-int inodeBitmap[amountOfINodes];
+char dataBitmap[amountOfDiskBlocks];
+char inodeBitmap[amountOfINodes];
 inode inodeTable[amountOfINodes];
 super_block superBlock;
 inode * root; //pointer to the root directory inode
+directory rootDir;
 
 
 /**
@@ -104,41 +105,67 @@ void *sfs_init(struct fuse_conn_info *conn)
     //Step 0) Create connection
         log_conn(conn);
         log_fuse_context(fuse_get_context());
-    
-    //Step 1) Open the disk file (file which we save everything to)
         disk_open((SFS_DATA)->diskfile);//SFS Data is a global
-    
-    //Step 2) Set the super block
-        superBlock.s_magic = getpid();     //magic number is process number
-        superBlock.s_maxbytes =  BLOCK_SIZE * maxDiskBlocks;  //6kb is max file size
-        superBlock.s_blocksize = BLOCK_SIZE;   //512 bytes
-    
-    //e superBlock.s_blocksize_bits = (long)(BLOCK_SIZE*8);
-    
-    //Step 3) Set the root directory
-        inodeTable[0].type = 'D';                                  //Directory
-        inodeTable[0].user_id = getuid();                          //User id
-        inodeTable[0].group_id = getegid();                        //Group ID
-        inodeTable[0].fileSize = 0;
-        inodeTable[0].lastAccess = time(NULL);
-        inodeTable[0].created = time(NULL);
-        inodeTable[0].modified = time(NULL);
-        inodeTable[0].block_amount = 0; //Directory
-        inodeTable[0].group_id = getegid(); //Directory
-        inodeTable[0].mode = S_IFDIR | S_IRWXU | S_IRWXG;
-        inodeBitmap[0] = 1;//not free
-        
-        //Step 4) Null out all the pointers for each inode
-        int i = 0;
-        for(;i<amountOfINodes;i++){
-            int j = 0;
-            for(;i<12;i++){
-                inodeTable[i].pointers[j] = -1;
-            }
-        }
-    //Step 5) Set root pointer, and make the pointer to its directory (for now) be null.
-        inodeTable[0].dir = NULL;     //directory pointer if file is directory
-        root = &inodeTable[0];
+  			int diskFileHandle = getDiskFile();
+  
+  	//Step 1) Check if this file system has been initialized before
+  
+  			int bytesRead = pread(diskFileHandle, superBlock, sizeof(super_block), 0);
+                                                                       //try to read in bytes into super block
+
+ 				if (bytesRead != sizeof(super_block)){												 //hasn't been initiliazed
+             																													 //Step 2) Set the super block
+                  superBlock.s_magic = getpid();    									 //magic number is process number
+                  superBlock.s_maxbytes = BLOCK_SIZE * maxDiskBlocks;  //6kb is max file size
+                  superBlock.s_blocksize = BLOCK_SIZE;  							 //512 bytes
+          				superBlock.init = 2017;															 //Block has been initiliazed
+              
+          
+              //Step 3) Set the root directory
+                  inodeTable[0].type = 'D';                            //Root Directory
+                  inodeTable[0].user_id = getuid();                    //User id
+                  inodeTable[0].group_id = getegid();                  //Group ID
+                  inodeTable[0].fileSize = 0;													 //
+                  inodeTable[0].lastAccess = time(NULL);							 //set up times
+                  inodeTable[0].created = time(NULL);
+                  inodeTable[0].modified = time(NULL);
+                  inodeTable[0].block_amount = 0; 										 //Directory has no blocks
+                  inodeTable[0].group_id = getegid(); 								//Permissions 
+                  inodeTable[0].mode = S_IFDIR | S_IRWXU | S_IRWXG;
+          				inodeTable[0].directory = rootDir;      
+          				  //First entry in a directory table is i
+          					rootDir.table[0].inodeNumber = 0;
+                  	rootDir.table[0].fileName[0] = '.';
+                  	rootDir.table[0].fileName[1] = '\0';
+
+                  inodeBitmap[0] = 1;//not free
+
+                  //Step 4) Null out all the pointers for each inode
+                  int i = 0;
+                  for(;i<amountOfINodes;i++){
+                      int j = 0;
+                      for(;i<12;i++){
+                          inodeTable[i].pointers[j] = -1;
+                      }
+                  }
+                  //Step 5) Set root pointer, and make the pointer to its directory
+                  inodeTable[0].dir = rootDir;     //directory pointer if file is directory
+                  root = &inodeTable[0];
+          	
+          }else{
+                //Step 1) Read the root directory struct at block 1
+                pread(diskFileHandle, rootDir, sizeof(directory), 1*BLOCK_SIZE);
+
+                //Step 3) Read the inode bit map array in at block 2
+                pread(diskFileHandle, inodeBitmap, sizeof(inodeBitmap), 2*BLOCK_SIZE);
+
+                //Step 4) Read the disk bit map array at block 8
+                pread(diskFileHandle, dataBitmap, sizeof(dataBitmap), 8*BLOCK_SIZE);
+
+                //Step 5) Read the inodes at block 722
+                pread(diskFileHandle, inodeTable, sizeof(inodeTable), 70*BLOCK_SIZE);
+          }
+          
     
     return SFS_DATA;
 }
@@ -150,9 +177,30 @@ void *sfs_init(struct fuse_conn_info *conn)
  */
 void sfs_destroy(void *userdata)
 {
+  //write everything back in to the disk file
+  
+  //file handle for the disk file 
+  int diskFileHandle = getDiskFile();
+
+  //Step 1) Write superblock at offset 0 or block 0
+  pwrite(diskFileHandle, superBlock, sizeof(super_block), 0);
+  
+  //Step 2) Write the root directory struct at block 1
+  pwrite(diskFileHandle, rootDir, sizeof(directory), 1*BLOCK_SIZE);
+  
+	//Step 3) Write the inode bit map in at block 2
+  pwrite(diskFileHandle, inodeBitmap, sizeof(inodeBitmap), 2*BLOCK_SIZE);
+  
+	//Step 4)  Write the disk bit map at block 8
+  pwrite(diskFileHandle, dataBitmap, sizeof(dataBitmap), 8*BLOCK_SIZE);
+
+  //Step 5)  Write the inodes at block 722
+  pwrite(diskFileHandle, inodeTable, sizeof(inodeTable), 70*BLOCK_SIZE);
     
-    log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
+  log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
 }
+
+
 
 /** Get file attributes.
  *
@@ -191,7 +239,7 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         int result = findINode(path, currentDirectory);
         
         if (result == -1) {
-            printf("Error path does not exist\n");
+            printf("Error: path does not exist\n");
             return;
         }
         
@@ -261,7 +309,7 @@ int findINode(const char *path, int currentLocation){
             
             //if directory does not exist in the current folder
             if(new_location == -1) {
-                printf("Error path does not exist\n");
+                printf("Error: path does not exist\n");
                 return -1;
             }
             
@@ -308,13 +356,20 @@ int findchild (const int current_dir, char * child) {
      get current directory's files and loop until
      you find the file or directory name that matches the child name
      */
-    directoryRow * curr = inodeTable[current_dir].dir;
+  	int i = 0;
+  	directory curr;
     
-    while (curr != NULL) {
-        if (strcmp(curr->fileName, child) == 0)
-            return curr->inodeNumber;
-        curr = curr->next;
-    }
+  	if (inodeTable[current_dir].type != 'D') {
+    	printf("Error: Folder does not exist\n");
+      return -1;
+  	}
+  
+  	curr = inodeTable[current_dir].dir;
+  
+  	for (; i < 31; i++) {
+    		if ( strcmp(child, curr.table[i].filename) == 0)
+           return curr.table[i].inodeNumber;
+  	}
     
     return -1;
 }
@@ -406,11 +461,6 @@ int sfs_unlink(const char *path)
  *
  * Changed in version 2.2
  
- 
- 
- 
- 
- 
  Path indicates the name of the file. 
  The flag argument indicates whether the file
         is to be read, written, or “updated” (read and written simultaneously)
@@ -429,6 +479,16 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
     
     //set fd to inode # associated with the file
    fd = findINode(path, currentDirectory);
+   int groupId = getegid();
+   int userId = getuid();
+ 	 if(inodeTable[fd].group_id != groupID || inodeTable[fd].user_id != userId){
+    //do not have permissions
+     printf("You do not have group or user permissions to open this file\n");
+
+     return -1;
+ 	 }
+  
+  
 
    if (fd == -1) {
         printf("Error opening file\n");
@@ -438,7 +498,7 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
    //set file descriptor to inode #
    fi->fh = fd;
 
-    return retstat;
+  return retstat;
 }
 
 /** Release an open file
@@ -557,7 +617,7 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
                 /**
                  Write to the buffer from the diskfile
                 */
-                pread(diskfile, buf+buffOffset, sizeBetween, currDiskBlock*BLOCK_SIZE);
+                pread(diskfile, buf+buffOffset, sizeBetween, (722*BLOCK_SIZE)+(currDiskBlock*BLOCK_SIZE));
   
                 /**
                  Book Keeping                
@@ -576,7 +636,7 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
                 
             }else if(sizeBetween >= numberOfBytesRemaining){ //need to read numberOfBytesRemaining into the buffer
                 
-                pread(diskfile, buf+buffOffset, numberOfBytesRemaining, currDiskBlock*BLOCK_SIZE);
+                pread(diskfile, buf+buffOffset, numberOfBytesRemaining,(722*BLOCK_SIZE)+currDiskBlock*BLOCK_SIZE);
                 numberOfBytesRead+=numberOfBytesRemaining;
                 
                 break;
@@ -706,6 +766,35 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
     return numberOfBytesWritten;
 }
 
+/** Read directory
+ *
+ * This supersedes the old getdir() interface.  New applications
+ * should use this.
+ *
+ * The filesystem may choose between two modes of operation:
+ *
+ * 1) The readdir implementation ignores the offset parameter, and
+ * passes zero to the filler function's offset.  The filler
+ * function will not return '1' (unless an error happens), so the
+ * whole directory is read in a single readdir operation.  This
+ * works just like the old getdir() method.
+ *
+ * 2) The readdir implementation keeps track of the offsets of the
+ * directory entries.  It uses the offset parameter and always
+ * passes non-zero offset to the filler function.  When the buffer
+ * is full (or an error happens) the filler function will return
+ * '1'.
+ *
+ * Introduced in version 2.3
+ */
+int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
+                struct fuse_file_info *fi)
+{
+    int retstat = 0;
+    
+    
+    return retstat;
+}
 
 
 
@@ -758,35 +847,6 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
     return retstat;
 }
 
-/** Read directory
- *
- * This supersedes the old getdir() interface.  New applications
- * should use this.
- *
- * The filesystem may choose between two modes of operation:
- *
- * 1) The readdir implementation ignores the offset parameter, and
- * passes zero to the filler function's offset.  The filler
- * function will not return '1' (unless an error happens), so the
- * whole directory is read in a single readdir operation.  This
- * works just like the old getdir() method.
- *
- * 2) The readdir implementation keeps track of the offsets of the
- * directory entries.  It uses the offset parameter and always
- * passes non-zero offset to the filler function.  When the buffer
- * is full (or an error happens) the filler function will return
- * '1'.
- *
- * Introduced in version 2.3
- */
-int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
-                struct fuse_file_info *fi)
-{
-    int retstat = 0;
-    
-    
-    return retstat;
-}
 
 /** Release directory
  *
@@ -811,7 +871,8 @@ struct fuse_operations sfs_oper = {
     
     //kwabe
     .create = sfs_create,
-    .unlink = sfs_unlink,
+    .unlink = 
+      ,
     
     //omer
     .read = sfs_read,
