@@ -10,8 +10,8 @@
 
 #define BLOCK_SIZE 512
 #define maxDiskBlocks 12
-#define amountOfINodes 500
-#define amountOfDiskBlocks 1024
+#define amountOfINodes 2608
+#define amountOfDiskBlocks 31250
 
 
 
