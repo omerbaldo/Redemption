@@ -47,7 +47,7 @@ Description:
  Directory that can allow up to 31 files to be saved to it.
  If more files are needed we can use the indirection
 Length:
- 504 bytes in length
+ 508 bytes in length
 **/
 typedef struct directory{
     directoryRow table[31];
@@ -80,7 +80,7 @@ typedef struct inode{
     time_t modified;        //When was it last modified             4
     int block_amount;       //amount of blocks it owns              4
     int pointers[12];       //pointers to blocks the                32
-    directoryRow * dir;     //directory pointer if file is directory
+    directory dir;		      //directory pointer if file is directory
     mode_t mode;
     //file owns
     int inode_number;
