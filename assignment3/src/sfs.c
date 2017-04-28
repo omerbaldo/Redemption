@@ -24,6 +24,9 @@ Directory Functions (extra credit):
  • .releasedir = sfs releasedir
  • .rmdir = sfs rmdir Remove the given directory.
  • mkdir = makes a directory
+ 
+ 
+ https://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html
  ---------------------------------------------------------------------------------------
  */
 
@@ -98,7 +101,7 @@ static int currentDirectory = 0;
  */
 void *sfs_init(struct fuse_conn_info *conn)
 {
-    printf("In sfs init");
+
     fprintf(stderr, "in bb-init\n");
     log_msg("\nsfs_init()\n");
     
@@ -106,73 +109,104 @@ void *sfs_init(struct fuse_conn_info *conn)
         log_conn(conn);
         log_fuse_context(fuse_get_context());
         disk_open((SFS_DATA)->diskfile);//SFS Data is a global
-  			int diskFileHandle = getDiskFile();
+        int diskFileHandle = getDiskFile();
   
   	//Step 1) Check if this file system has been initialized before
   
-            void * ptr = (void *)&superBlock;
-  			int bytesRead = pread(diskFileHandle, ptr, sizeof(super_block), 0);
-                                                                       //try to read in bytes into super block
+        void * ptr = (void *)&superBlock;
+        int bytesRead = pread(diskFileHandle, ptr, sizeof(super_block), 0);
+                        //try to read in bytes into super block
 
- 				if (bytesRead != sizeof(super_block)){												 //hasn't been initiliazed
-             																													 //Step 2) Set the super block
-                  superBlock.s_magic = getpid();    									 //magic number is process number
-                  superBlock.s_maxbytes = BLOCK_SIZE * maxDiskBlocks;  //6kb is max file size
-                  superBlock.s_blocksize = BLOCK_SIZE;  							 //512 bytes
-          				superBlock.init = 2017;															 //Block has been initiliazed
-              
+
+        int hasBeenInitiled = 1;
+    
+        if(bytesRead==sizeof(super_block)){
+            if(superBlock.init !=2017){
+                hasBeenInitiled = -1;
+            }
+        }else{
+            hasBeenInitiled = -1;
+        }
+        
+    
+    //Step 2.5) File system has not been initialized
+    
+        if (hasBeenInitiled == -1){
+                
+              log_msg("\tThis system has not been initalized ()\n");
+
+                //Step 2) Set the super block
+              superBlock.s_magic = getpid();    									 //magic number is process number
+              superBlock.s_maxbytes = BLOCK_SIZE * maxDiskBlocks;  //6kb is max file size
+              superBlock.s_blocksize = BLOCK_SIZE;  							 //512 bytes
+                    superBlock.init = 2017;															 //Block has been initiliazed
           
-              //Step 3) Set the root directory
-                  inodeTable[0].type = 'D';                            //Root Directory
-                  inodeTable[0].user_id = getuid();                    //User id
-                  inodeTable[0].group_id = getegid();                  //Group ID
-                  inodeTable[0].fileSize = 0;													 //
-                  inodeTable[0].lastAccess = time(NULL);							 //set up times
-                  inodeTable[0].created = time(NULL);
-                  inodeTable[0].modified = time(NULL);
-                  inodeTable[0].block_amount = 0; 										 //Directory has no blocks
-                  inodeTable[0].group_id = getegid(); 								//Permissions 
-                  inodeTable[0].mode = S_IFDIR | S_IRWXU | S_IRWXG;
-          				  //First entry in a directory table is i
-          					rootDir.table[0].inodeNumber = 0;
-                            rootDir.table[0].fileName[0] = '.';
-                            rootDir.table[0].fileName[1] = '\0';
+      
+          //Step 3) Set the root directory
+              inodeTable[0].type = 'D';                            //Root Directory
+              inodeTable[0].user_id = getuid();                    //User id
+              inodeTable[0].group_id = getegid();                  //Group ID
+              inodeTable[0].fileSize = 0;													 //
+              inodeTable[0].lastAccess = time(NULL);							 //set up times
+              inodeTable[0].created = time(NULL);
+              inodeTable[0].modified = time(NULL);
+              inodeTable[0].block_amount = 0; 										 //Directory has no blocks
+              inodeTable[0].group_id = getegid(); 								//Permissions 
+              inodeTable[0].mode = S_IFDIR | S_IRWXU | S_IRWXG;
+                      //First entry in a directory table is i
+                        rootDir.table[0].inodeNumber = 0;
+                        rootDir.table[0].fileName[0] = '.';
+                        rootDir.table[0].fileName[1] = '\0';
 
-                  inodeBitmap[0] = 1;//not free
+              inodeBitmap[0] = 1;//not free
 
-                  //Step 4) Null out all the pointers for each inode
-                  int i = 0;
-                  for(;i<amountOfINodes;i++){
-                      int j = 0;
-                      for(;i<12;i++){
-                          inodeTable[i].pointers[j] = -1;
-                      }
+              //Step 4) Null out all the pointers for each inode
+              int i = 0;
+              for(;i<amountOfINodes;i++){
+                  int j = 0;
+                  for(;i<12;i++){
+                      inodeTable[i].pointers[j] = -1;
                   }
-                  //Step 5) Set root pointer, and make the pointer to its directory
-                  inodeTable[0].dir = &rootDir;     //directory pointer if file is directory
-                  root = &inodeTable[0];
-          	
-          }else{
-                //Step 1) Read the root directory struct at block 1
-              
-              void * ptr = (void *) &rootDir;
-              
-                pread(diskFileHandle, ptr, sizeof(directory), 1*BLOCK_SIZE);
-
-              ptr = (void *) &inodeBitmap;
-                //Step 3) Read the inode bit map array in at block 2
-                pread(diskFileHandle, ptr, sizeof(inodeBitmap), 2*BLOCK_SIZE);
-
-               ptr = (void *) &dataBitmap;
-                //Step 4) Read the disk bit map array at block 8
-                pread(diskFileHandle, ptr, sizeof(dataBitmap), 8*BLOCK_SIZE);
-
-              ptr = (void *) &inodeTable;
-
-                //Step 5) Read the inodes at block 722
-                pread(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
-          }
-          
+              }
+              //Step 5) Set root pointer, and make the pointer to its directory
+              inodeTable[0].dir = &rootDir;     //directory pointer if file is directory
+              root = &inodeTable[0];
+        }else{
+            
+            
+            //Step 1) Read the root directory struct at block 1
+            
+            void * ptr = (void *) &superBlock;
+            
+            pread(diskFileHandle, ptr, sizeof(superBlock), 0*BLOCK_SIZE);
+            
+            ptr = (void *) &rootDir;
+            
+            pread(diskFileHandle, ptr, sizeof(directory), 1*BLOCK_SIZE);
+            
+            ptr = (void *) &inodeBitmap;
+            //Step 3) Read the inode bit map array in at block 2
+            pread(diskFileHandle, ptr, sizeof(inodeBitmap), 2*BLOCK_SIZE);
+            
+            ptr = (void *) &dataBitmap;
+            //Step 4) Read the disk bit map array at block 8
+            pread(diskFileHandle, ptr, sizeof(dataBitmap), 8*BLOCK_SIZE);
+            
+            ptr = (void *) &inodeTable;
+            
+            
+            
+            //Step 5) Read the inodes at block 722
+            pread(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
+            
+            
+            log_msg("\tThis system has been initalized . The init value is");
+            
+            if(superBlock.init == 2017){
+                log_msg("2017");
+            }
+            
+    }
     
     return SFS_DATA;
 }
@@ -184,14 +218,18 @@ void *sfs_init(struct fuse_conn_info *conn)
  */
 void sfs_destroy(void *userdata)
 {
-  //write everything back in to the disk file
-  
-  //file handle for the disk file 
-  int diskFileHandle = getDiskFile();
-    
-    
 
-    void * ptr = (void *) &rootDir;
+    log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
+
+//write everything back in to the disk file
+  
+   //file handle for the disk file
+    int diskFileHandle = getDiskFile();
+    
+    void * ptr = (void *) &superBlock;
+    pwrite(diskFileHandle, ptr, sizeof(superBlock), 0*BLOCK_SIZE);
+    
+    ptr = (void *) &rootDir;
     
     pwrite(diskFileHandle, ptr, sizeof(directory), 1*BLOCK_SIZE);
     
@@ -207,7 +245,6 @@ void sfs_destroy(void *userdata)
     
     //Step 5) Read the inodes at block 722
     pwrite(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
-  log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
 }
 
 
@@ -220,15 +257,23 @@ void sfs_destroy(void *userdata)
  */
 int sfs_getattr(const char *path, struct stat *statbuf)
 {
-    printf("In getAttr");
+    log_msg("\nsfs_getattr(path=\"%s\", statbuf=0x%08x)\n",
+            path, statbuf);
+    
+    if(superBlock.init == 2017){
+        log_msg("\tWe good in get attr. values are read in correct\n");
+    }else{
+        log_msg("\tWe are not in get attr. values are read in correct\n");
+    }
+    
     int retstat = 0;
     char fpath[PATH_MAX];
     inode * node;
     
-    log_msg("\nsfs_getattr(path=\"%s\", statbuf=0x%08x)\n",
-            path, statbuf);
-    
     if (strcmp("/",path) == 0) {//root
+        
+        log_msg("\tWe looking for root directory\n");
+
         
         statbuf->st_dev = 0;//Device ID of device containing file.
         statbuf->st_rdev = 0;//Device ID (if file is character or block special)
@@ -246,10 +291,13 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         statbuf->st_ctime = root->created;
         
     } else {
+        log_msg("\tWe are looking for another directory\n");
+
         int result = findINode(path, currentDirectory);
         
         if (result == -1) {
-            printf("Error: path does not exist\n");
+            log_msg("\tError: path does not exist\n");
+
             return;
         }
         
@@ -270,6 +318,7 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         statbuf->st_mtime = node->modified;
         statbuf->st_ctime = node->created;
     }
+ 
     
     return retstat;//0
 }
@@ -295,7 +344,13 @@ int sfs_getattr(const char *path, struct stat *statbuf)
  cat file.txt           starts search at your current directory
  
  
+ If we are using root directories, it should work for the following test cases
  
+ 
+touch ./test.txt
+touch test.txt
+ls /                              works
+
  
  */
 int findINode(const char *path, int currentLocation){
@@ -422,6 +477,10 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
                     inodeTable[i].block_amount = 0; 
                     inodeTable[i].group_id = getegid(); 
                     inodeTable[i].mode = S_IFDIR | S_IRWXU | S_IRWXG;
+                    
+                    inodeTable->inode_number = i;
+                    fi->fh = i;
+                    
                     inodeBitmap[i] = 1;//not free
                     return 0;
                 }
