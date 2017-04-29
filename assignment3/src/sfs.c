@@ -91,6 +91,17 @@ void printRootDirElements(){
 }
 
 
+void printFirstTenINodes(){
+    fprintf(stderr, "printTenInodes() {\n");
+    int i = 0;
+    for(; i<10;i++){
+        if(inodeBitmap[i]=='1'){
+            fprintf(stderr, "Inode Num %d \n", inodeTable[i].inode_number );
+        }
+    }
+    fprintf(stderr, "}\n");
+}
+
 //--------------------------------------------------------------------------------
 
 //
@@ -534,7 +545,7 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
                 inodeTable[i].group_id = getegid();
                 inodeTable[i].mode = S_IFDIR | S_IRWXU | S_IRWXG;
                 
-                inodeTable->inode_number = i;
+                inodeTable[i].inode_number = i;
                 fi->fh = i;
                 
                 inodeBitmap[i] = '1';//not free
@@ -543,7 +554,7 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
                 
                 addFileToRoot(filename,i); //add to the root directory.
                 
-                
+                printFirstTenINodes();
                 fprintf(stderr, "\t returning inode # %d \n}\n", i);
                 return 0;
             }
