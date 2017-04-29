@@ -18,7 +18,7 @@
  • .write =    Write bytes from the given buffer into a file.
  
  
-Directory Functions (extra credit):
+ Directory Functions (extra credit):
  • .readdir = Return one or more directory entries (struct dirent) to the caller.
  • .opendir = sfs opendir Open a directory for reading.
  • .releasedir = sfs releasedir
@@ -85,23 +85,10 @@ void printRootDirElements(){
     int i = 0;
     for(; i<31;i++){
         fprintf(stderr, "%d  file : %s  Inode Num %d \n", i, rootDir.table[i].fileName, rootDir.table[i].inodeNumber );
-
+        
     }
     fprintf(stderr, "}\n");
-
-    
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
 //--------------------------------------------------------------------------------
@@ -123,117 +110,127 @@ void printRootDirElements(){
  */
 void *sfs_init(struct fuse_conn_info *conn)
 {
-
+    
     fprintf(stderr, "bb-init(){\n");
     log_msg("\nsfs_init()\n");
     
     
     //Step 0) Create connection
-        log_conn(conn);
-        log_fuse_context(fuse_get_context());
-        disk_open((SFS_DATA)->diskfile);//SFS Data is a global
-        int diskFileHandle = getDiskFile();
-  
-  	//Step 1) Check if this file system has been initialized before
-  
-        void * ptr = (void *)&superBlock;
-        int bytesRead = pread(diskFileHandle, ptr, sizeof(super_block), 0);
-                        //try to read in bytes into super block
-
-
-        int hasBeenInitiled = 1;
+    log_conn(conn);
+    log_fuse_context(fuse_get_context());
+    disk_open((SFS_DATA)->diskfile);//SFS Data is a global
+    int diskFileHandle = getDiskFile();
     
-        if(bytesRead==sizeof(super_block)){
-            if(superBlock.init !=2017){
-                hasBeenInitiled = -1;
-            }
-        }else{
+    //Step 1) Check if this file system has been initialized before
+    
+    void * ptr = (void *)&superBlock;
+    int bytesRead = pread(diskFileHandle, ptr, sizeof(super_block), 0);
+    //try to read in bytes into super block
+    
+    
+    int hasBeenInitiled = 1;
+    
+    if(bytesRead==sizeof(super_block)){
+        if(superBlock.init !=2017){
             hasBeenInitiled = -1;
         }
-        
+    }else{
+        hasBeenInitiled = -1;
+    }
+    
     
     //Step 2.5) File system has not been initialized
     
-        if (hasBeenInitiled == -1){
-              fprintf(stderr, "\t this system has not been initalized \n ");
-
-
-                //Step 2) Set the super block
-              superBlock.s_magic = getpid();    									 //magic number is process number
-              superBlock.s_maxbytes = BLOCK_SIZE * maxDiskBlocks;  //6kb is max file size
-              superBlock.s_blocksize = BLOCK_SIZE;  							 //512 bytes
-              superBlock.init = 2017;															 //Block has been initiliazed
-          
-      
-          //Step 3) Set the root directory
-              inodeTable[0].type = 'D';                            //Root Directory
-              inodeTable[0].user_id = getuid();                    //User id
-              inodeTable[0].group_id = getegid();                  //Group ID
-              inodeTable[0].fileSize = 0;													 //
-              inodeTable[0].lastAccess = time(NULL);							 //set up times
-              inodeTable[0].created = time(NULL);
-              inodeTable[0].modified = time(NULL);
-              inodeTable[0].block_amount = 0; 										 //Directory has no blocks
-              inodeTable[0].group_id = getegid(); 								//Permissions 
-              inodeTable[0].mode = S_IFDIR | S_IRWXU | S_IRWXG;
-            
-                        //set up root directory
-                        int i = 0;
-                        for(;i<31;i++){
-                            rootDir.table[i].inodeNumber = -1;
-                        }
-            
-                        //First entry in a directory table is i
-                        rootDir.table[0].inodeNumber = 0;
-                        rootDir.table[0].fileName[0] = '.';
-                        rootDir.table[0].fileName[1] = '\0';
-
-              inodeBitmap[0] = 1;//not free
-
-              //Step 4) Null out all the pointers for each inode
-              i = 0;
-              for(;i<amountOfINodes;i++){
-                  int j = 0;
-                  for(;i<12;i++){
-                      inodeTable[i].pointers[j] = -1;
-                  }
-              }
-              //Step 5) Set root pointer, and make the pointer to its directory
-              inodeTable[0].dir = &rootDir;     //directory pointer if file is directory
-              root = &inodeTable[0];
-        }else{
-            
-            fprintf(stderr, "\t this file system has not been initalized. super block init value is %d \n",superBlock.init);
-
-            //Step 1) Read the root directory struct at block 1
-            
-            void * ptr = (void *) &superBlock;
-            
-            pread(diskFileHandle, ptr, sizeof(superBlock), 0*BLOCK_SIZE);
-            
-            ptr = (void *) &rootDir;
-            
-            pread(diskFileHandle, ptr, sizeof(directory), 1*BLOCK_SIZE);
-            
-            ptr = (void *) &inodeBitmap;
-            //Step 3) Read the inode bit map array in at block 2
-            pread(diskFileHandle, ptr, sizeof(inodeBitmap), 2*BLOCK_SIZE);
-            
-            ptr = (void *) &dataBitmap;
-            //Step 4) Read the disk bit map array at block 8
-            pread(diskFileHandle, ptr, sizeof(dataBitmap), 8*BLOCK_SIZE);
-            
-            ptr = (void *) &inodeTable;
-            
-            root = &inodeTable[0];
-
-            
-            //Step 5) Read the inodes at block 722
-            pread(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
-            
+    if (hasBeenInitiled == -1){
+        fprintf(stderr, "\t this system has not been initalized \n ");
+        
+        
+        //Step 2) SUPER BLOCK
+        superBlock.s_magic = getpid();    									//magic number is process number
+        superBlock.s_maxbytes = BLOCK_SIZE * maxDiskBlocks;                   //6kb is max file size
+        superBlock.s_blocksize = BLOCK_SIZE;                                  //512 bytes
+        superBlock.init = 2017;												//Block has been initiliazed
+        
+        
+        //Step 3) ROOT DIR
+        inodeTable[0].type = 'D';
+        inodeTable[0].user_id = getuid();
+        inodeTable[0].group_id = getegid();
+        inodeTable[0].fileSize = 0;
+        inodeTable[0].lastAccess = time(NULL);
+        inodeTable[0].created = time(NULL);
+        inodeTable[0].modified = time(NULL);
+        inodeTable[0].block_amount = 0;
+        inodeTable[0].group_id = getegid();
+        inodeTable[0].mode = S_IFDIR | S_IRWXU | S_IRWXG;
+        
+        //ROOT DIR ELEMENTS
+        int i = 0;
+        for(;i<31;i++){
+            rootDir.table[i].inodeNumber = -1;
+        }
+        
+        //First entry in a directory table is i
+        rootDir.table[0].inodeNumber = 0;
+        rootDir.table[0].fileName[0] = '.';
+        rootDir.table[0].fileName[1] = '\0';
+        
+        //STEP 4) BIT MAP
+        i = 0;
+        for(;i<amountOfDiskBlocks;i++){
+            dataBitmap[i] = '0';
+        }
+        i = 0;
+        for(;i<amountOfINodes;i++){
+            inodeBitmap[i] = '0';
+        }
+        inodeBitmap[0] = '1';//not free
+        
+        
+        //Step 4) Null out all the pointers for each inode
+        i = 0;
+        for(;i<amountOfINodes;i++){
+            int j = 0;
+            for(;i<12;i++){
+                inodeTable[i].pointers[j] = -1;
+            }
+        }
+        //Step 5) Set root pointer, and make the pointer to its directory
+        inodeTable[0].dir = &rootDir;     //directory pointer if file is directory
+        root = &inodeTable[0];
+    }else{
+        
+        fprintf(stderr, "\t this file system has not been initalized. super block init value is %d \n",superBlock.init);
+        
+        //Step 1) Read the root directory struct at block 1
+        
+        void * ptr = (void *) &superBlock;
+        
+        pread(diskFileHandle, ptr, sizeof(superBlock), 0*BLOCK_SIZE);
+        
+        ptr = (void *) &rootDir;
+        
+        pread(diskFileHandle, ptr, sizeof(directory), 1*BLOCK_SIZE);
+        
+        ptr = (void *) &inodeBitmap;
+        //Step 3) Read the inode bit map array in at block 2
+        pread(diskFileHandle, ptr, sizeof(inodeBitmap), 2*BLOCK_SIZE);
+        
+        ptr = (void *) &dataBitmap;
+        //Step 4) Read the disk bit map array at block 8
+        pread(diskFileHandle, ptr, sizeof(dataBitmap), 8*BLOCK_SIZE);
+        
+        ptr = (void *) &inodeTable;
+        
+        root = &inodeTable[0];
+        
+        
+        //Step 5) Read the inodes at block 722
+        pread(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
+        
     }
     fprintf(stderr, "}\n");
-
+    
     return SFS_DATA;
 }
 
@@ -245,12 +242,12 @@ void *sfs_init(struct fuse_conn_info *conn)
 void sfs_destroy(void *userdata)
 {
     fprintf(stderr, "bb-destroy(){ \n");
-
+    
     log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
-
-//write everything back in to the disk file
-  
-   //file handle for the disk file
+    
+    //write everything back in to the disk file
+    
+    //file handle for the disk file
     int diskFileHandle = getDiskFile();
     
     void * ptr = (void *) &superBlock;
@@ -273,7 +270,7 @@ void sfs_destroy(void *userdata)
     //Step 5) Read the inodes at block 722
     pwrite(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
     fprintf(stderr, "} \n");
-
+    
 }
 
 
@@ -285,19 +282,19 @@ void sfs_destroy(void *userdata)
  * mount option is given.
  
  
-Only Required Things:
-st_mode
-st_uid
-st_gid
-st_nlink
-st_ino
-st_dev
+ Only Required Things:
+ st_mode
+ st_uid
+ st_gid
+ st_nlink
+ st_ino
+ st_dev
  
  */
 int sfs_getattr(const char *path, struct stat *statbuf)
 {
     fprintf(stderr, "getattr() searching for %s {\n", path);
-
+    
     log_msg("\nsfs_getattr(path=\"%s\", statbuf=0x%08x)\n",
             path, statbuf);
     
@@ -321,19 +318,19 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         statbuf->st_mode = root->mode;      //Mode of file. (file type and permissions)
         statbuf->st_uid = root->user_id;    //user id
         statbuf->st_gid = root->group_id;   //group id
-
+        
         
     } else {
         fprintf(stderr, "\t We are looking for another file. Here are the things in the directory \n");
         printRootDirElements();
-
+        
         int result = findINode(path, currentDirectory);
         
         if (result == -1) {
             fprintf(stderr, "\t Error file does not exsist\n");
-
+            
             //log_msg("\tError: path does not exist\n");
-
+            
             return -ENOENT;
             //ENOENT; // no file or directory
         }
@@ -349,9 +346,9 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         statbuf->st_gid = node->group_id;//group id
         
     }
- 
+    
     fprintf(stderr, "}\n");
-
+    
     return retstat;//0
 }
 /*
@@ -379,16 +376,16 @@ int sfs_getattr(const char *path, struct stat *statbuf)
  If we are using root directories, it should work for the following test cases
  
  
-touch ./test.txt
-touch test.txt
-ls /                              works
-
+ touch ./test.txt
+ touch test.txt
+ ls /                              works
+ 
  
  */
 int findINode(const char *path, int currentLocation){
     int len = strlen(path);//length of current path
     int i = 0;
-
+    
     char c;
     int result = -1;
     char temp_path[len];
@@ -453,20 +450,20 @@ int findchild (const int current_dir, char * child) {
      get current directory's files and loop until
      you find the file or directory name that matches the child name
      */
-  	int i = 0;
-  	
+    int i = 0;
     
-  	if (inodeTable[current_dir].type != 'D') {
-    	printf("Error: Folder does not exist\n");
-      return -1;
-  	}
-  
-  	directory * curr = inodeTable[current_dir].dir;
-  
-  	for (; i < 31; i++) {
-    		if ( strcmp(child, curr->table[i].fileName) == 0)
-           return curr->table[i].inodeNumber;
-  	}
+    
+    if (inodeTable[current_dir].type != 'D') {
+        printf("Error: Folder does not exist\n");
+        return -1;
+    }
+    
+    directory * curr = inodeTable[current_dir].dir;
+    
+    for (; i < 31; i++) {
+        if ( strcmp(child, curr->table[i].fileName) == 0)
+            return curr->table[i].inodeNumber;
+    }
     
     return -1;
 }
@@ -477,14 +474,19 @@ void addFileToRoot (const char * fileName, int fileInodeNumber){
         if(rootDir.table[i].inodeNumber==-1){
             //its free
             rootDir.table[i].inodeNumber = fileInodeNumber;
-           
-            memcpy((void *)&rootDir.table[i], fileName, strlen(fileName)+1);
+            
+            memcpy((void *)&rootDir.table[i].fileName, fileName, strlen(fileName)+1);
             rootDir.table[i].fileName;
+            
+            
+            
+            fprintf(stderr, "\t Adding file %s with inode # %d\n", fileName, fileInodeNumber);
+            
             printRootDirElements();
             return;
         }
     }
-        
+    
     //here do memory indirection
     
     
@@ -507,47 +509,47 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
     int retstat = 0;
     fprintf(stderr, "create() adding this file %s {\n", path);
-
+    
     log_msg("\nsfs_create(path=\"%s\", mode=0%03o, fi=0x%08x)\n",
             path, mode, fi);
-
+    
     //Step 0) Check if inode for file trying to be created exists
     int result = findINode(path, currentDirectory);
-
+    
     //Step 1) If it doesn't exist find empty inode in bitmap and give inode in table correct properties
-        if (result == -1) {
-            printf("path does not exist. Create that junk\n");
-
-            int i = 0;
-            for( ;i < amountOfINodes; i++){
-                if (inodeBitmap[i] == 0){
-                    inodeTable[i].type = 'F';                                  //File
-                    inodeTable[i].user_id = getuid();                          //User id
-                    inodeTable[i].group_id = getegid();                        //Group ID
-                    inodeTable[i].fileSize = 0;
-                    inodeTable[i].lastAccess = time(NULL);
-                    inodeTable[i].created = time(NULL);
-                    inodeTable[i].modified = time(NULL);
-                    inodeTable[i].block_amount = 0; 
-                    inodeTable[i].group_id = getegid(); 
-                    inodeTable[i].mode = S_IFDIR | S_IRWXU | S_IRWXG;
-                    
-                    inodeTable->inode_number = i;
-                    fi->fh = i;
-                    
-                    inodeBitmap[i] = 1;//not free
-                    
-                    const char * filename = (path+1);
-
-                    addFileToRoot(filename,i); //add to the root directory.
-                    
-                    
-                    fprintf(stderr, "\t returning inode # %d \n}\n", i);
-                    return 0;
-                }
+    if (result == -1) {
+        printf("path does not exist. Create that junk\n");
+        
+        int i = 0;
+        for( ;i < amountOfINodes; i++){
+            if (inodeBitmap[i] == '0'){
+                inodeTable[i].type = 'F';                                  //File
+                inodeTable[i].user_id = getuid();                          //User id
+                inodeTable[i].group_id = getegid();                        //Group ID
+                inodeTable[i].fileSize = 0;
+                inodeTable[i].lastAccess = time(NULL);
+                inodeTable[i].created = time(NULL);
+                inodeTable[i].modified = time(NULL);
+                inodeTable[i].block_amount = 0;
+                inodeTable[i].group_id = getegid();
+                inodeTable[i].mode = S_IFDIR | S_IRWXU | S_IRWXG;
+                
+                inodeTable->inode_number = i;
+                fi->fh = i;
+                
+                inodeBitmap[i] = '1';//not free
+                
+                const char * filename = (path+1);
+                
+                addFileToRoot(filename,i); //add to the root directory.
+                
+                
+                fprintf(stderr, "\t returning inode # %d \n}\n", i);
+                return 0;
             }
         }
-
+    }
+    
     //Step 2) If it does exist just return -1
     return -1;
 }
@@ -557,31 +559,31 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 int sfs_unlink(const char *path)
 {
     fprintf(stderr, "unlink (){ \n");
-
+    
     int retstat = 0;
     log_msg("sfs_unlink(path=\"%s\")\n", path);
     
     
     //Step 0) Check if inode for file trying to be deleted exists
     int result = findINode(path, currentDirectory);
-
+    
     //Step 1) If it doesn't exist just return -1
     if (result == -1) {
         printf("path does not exist. Cannot delete\n");
         return -1;
     }
-
+    
     //Step 2) If it does exist set inode bitmap to 0
-    inodeBitmap[result] = 0;//not free
+    inodeBitmap[result] = '0';//not free
     int j = 0;
     for(;j<12;j++){
         inodeTable[result].pointers[j] = -1;
     }
-
+    
     fprintf(stderr, "} \n");
-
+    
     return 0;
-   
+    
 }
 
 /** File open operation
@@ -594,10 +596,10 @@ int sfs_unlink(const char *path)
  *
  * Changed in version 2.2
  
- Path indicates the name of the file. 
+ Path indicates the name of the file.
  The flag argument indicates whether the file
-        is to be read, written, or “updated” (read and written simultaneously)
- The returned value filep is called a file descriptor. 
+ is to be read, written, or “updated” (read and written simultaneously)
+ The returned value filep is called a file descriptor.
  It is a small integer used to identify the file in subsequent calls
  to read, write, or otherwise manipulate it. (return i-node # as fd)
  
@@ -606,31 +608,31 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
 {
     int retstat = 0;
     int fd;
-
+    
     log_msg("\nsfs_open(path\"%s\", fi=0x%08x)\n",
             path, fi);
     fprintf(stderr, "open (){ \n");
-
+    
     
     //set fd to inode # associated with the file
-   fd = findINode(path, currentDirectory);
-   int groupIdCurrrently = getegid();
-   int userIdCurrrently = getuid();
+    fd = findINode(path, currentDirectory);
+    int groupIdCurrrently = getegid();
+    int userIdCurrrently = getuid();
     
     if(inodeTable[fd].group_id != groupIdCurrrently || inodeTable[fd].user_id != userIdCurrrently){
         //do not have permissions
         printf("You do not have group or user permissions to open this file\n");
         return -1;
     }
-  
-   if (fd == -1) {
+    
+    if (fd == -1) {
         printf("Error opening file\n");
         return -1;
-   }
+    }
     fi->fh = fd;    //set file descriptor to inode #
     fprintf(stderr, "} \n");
-
-  return retstat;
+    
+    return retstat;
 }
 
 /** Release an open file
@@ -653,19 +655,19 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
     log_msg("\nsfs_release(path=\"%s\", fi=0x%08x)\n",
             path, fi);
     fprintf(stderr, "sfs release (){ \n");
-
+    
     
     int result;
     
     //closes file descriptor
     result = close(fi->fh);
-
+    
     if (result == -1) {
         printf("Error closing file descriptor\n");
         return -1;
     }
     fprintf(stderr, "} \n");
-
+    
     return retstat;
 }
 
@@ -682,118 +684,118 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
  
  Arguements)
  
-    const char *path path of file
-    char *buf is where we will read the bytes into 
-    size is size of bytes we are reading
-    offset is where to start reading
-    fi is a struct that gives us information about open files. in it we have the following fields
-        (int)fh for file handle. this is filled out by open 
-        (int)flags  flags.
+ const char *path path of file
+ char *buf is where we will read the bytes into
+ size is size of bytes we are reading
+ offset is where to start reading
+ fi is a struct that gives us information about open files. in it we have the following fields
+ (int)fh for file handle. this is filled out by open
+ (int)flags  flags.
  
  
  Algorithm)
-    open() recursively finds the file and allocates a file descriptor for something to read.
-    get the current file open (from file descriptor) 
+ open() recursively finds the file and allocates a file descriptor for something to read.
+ get the current file open (from file descriptor)
  
-    begin reading into the buff.
-        start at a certain point. keep going. if you run out of space stop reading at curr block and go to new block
+ begin reading into the buff.
+ start at a certain point. keep going. if you run out of space stop reading at curr block and go to new block
  
  
  error) try to read too much bytes
  
  int block_read(const int block_num, void *buf);
-
+ 
  */
 int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
     int retstat = 0;
     fprintf(stderr, "read (){ \n");
-
+    
     log_msg("\nsfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
             path, buf, size, offset, fi);
     
     int fileDescriptor = fi->fh;                            // file descriptor or inode #
     inode * currFile = &inodeTable[fileDescriptor];          // current inode for open file
     
-
+    
     //Step 1) Set variables
     
-        int diskfile = getDiskFile();
+    int diskfile = getDiskFile();
     
-        int currDiskBlockIndex = ((int)offset/(int)BLOCK_SIZE);   //ex. trunc(1000/512) means start at index 1
-                                                                 //(first block that current thread owns)
+    int currDiskBlockIndex = ((int)offset/(int)BLOCK_SIZE);   //ex. trunc(1000/512) means start at index 1
+    //(first block that current thread owns)
     
-        int currDiskBlock = currFile->pointers[currDiskBlockIndex];  // what block to start out at in pointer list. ex 1000/512
-                                                    //  will tell you to start at block 1
+    int currDiskBlock = currFile->pointers[currDiskBlockIndex];  // what block to start out at in pointer list. ex 1000/512
+    //  will tell you to start at block 1
     
-        int byteOffset = offset % BLOCK_SIZE;      //   this is where to start in that block
+    int byteOffset = offset % BLOCK_SIZE;      //   this is where to start in that block
     
-        int numberOfBytesRead = 0;                //    number of bytes read in
+    int numberOfBytesRead = 0;                //    number of bytes read in
     
-        int numberOfBytesRemaining = size;       //     number of bytes read in
-
-        int sizeBetween = 0;
+    int numberOfBytesRemaining = size;       //     number of bytes read in
     
-        int buffOffset = 0;
+    int sizeBetween = 0;
+    
+    int buffOffset = 0;
     
     //Step 2) Read bytes in so long as their less than the size of the file
-        while(numberOfBytesRead < size){
-            sizeBetween = BLOCK_SIZE - byteOffset;          //number of bytes between offset and end of block
-
-            if(currDiskBlockIndex>=12){
-                return numberOfBytesRead;
-            }
-            //check if the current disk block is -1. means nothing else to read
-            if(currDiskBlock == -1){
-                return numberOfBytesRead;
-            }
+    while(numberOfBytesRead < size){
+        sizeBetween = BLOCK_SIZE - byteOffset;          //number of bytes between offset and end of block
         
-            
-            if(sizeBetween < numberOfBytesRemaining){       //need to read all the memory in this block and move onto the next one
-                
-                /**
-                 Write to the buffer from the diskfile
-                */
-                pread(diskfile, buf+buffOffset, sizeBetween, (722*BLOCK_SIZE)+(currDiskBlock*BLOCK_SIZE));
-  
-                /**
-                 Book Keeping                
-                 */
-                buffOffset+= sizeBetween; //next time you write, write from the offset on buffer
-                numberOfBytesRemaining -= sizeBetween; //how much bytes we read to the end of the block
-                byteOffset = 0;//start reading bytes from 0
-                
-                /**
-                 Get the next disk block that the inode owns
-                */
-                currDiskBlockIndex++;
-                currDiskBlock = currFile->pointers[currDiskBlockIndex];
-                
-                numberOfBytesRead+=sizeBetween;
-                
-            }else if(sizeBetween >= numberOfBytesRemaining){ //need to read numberOfBytesRemaining into the buffer
-                
-                pread(diskfile, buf+buffOffset, numberOfBytesRemaining,(722*BLOCK_SIZE)+currDiskBlock*BLOCK_SIZE);
-                numberOfBytesRead+=numberOfBytesRemaining;
-                
-                break;
-            }
+        if(currDiskBlockIndex>=12){
+            return numberOfBytesRead;
         }
+        //check if the current disk block is -1. means nothing else to read
+        if(currDiskBlock == -1){
+            return numberOfBytesRead;
+        }
+        
+        
+        if(sizeBetween < numberOfBytesRemaining){       //need to read all the memory in this block and move onto the next one
+            
+            /**
+             Write to the buffer from the diskfile
+             */
+            pread(diskfile, buf+buffOffset, sizeBetween, (722*BLOCK_SIZE)+(currDiskBlock*BLOCK_SIZE));
+            
+            /**
+             Book Keeping
+             */
+            buffOffset+= sizeBetween; //next time you write, write from the offset on buffer
+            numberOfBytesRemaining -= sizeBetween; //how much bytes we read to the end of the block
+            byteOffset = 0;//start reading bytes from 0
+            
+            /**
+             Get the next disk block that the inode owns
+             */
+            currDiskBlockIndex++;
+            currDiskBlock = currFile->pointers[currDiskBlockIndex];
+            
+            numberOfBytesRead+=sizeBetween;
+            
+        }else if(sizeBetween >= numberOfBytesRemaining){ //need to read numberOfBytesRemaining into the buffer
+            
+            pread(diskfile, buf+buffOffset, numberOfBytesRemaining,(722*BLOCK_SIZE)+currDiskBlock*BLOCK_SIZE);
+            numberOfBytesRead+=numberOfBytesRemaining;
+            
+            break;
+        }
+    }
     
     fprintf(stderr, "} \n");
-
+    
     return numberOfBytesRead;
 }
 /**
- This func essentially emulates 
+ This func essentially emulates
  
-    size_t pread(int fd, void *buf, size_t count, off_t offset);
-
-    fd is the file descriptor of the file 
-    buff is the buffer 
-    count is how much you want to read in
-    offset is basically the offset from the beginning of the file.
-*/
+ size_t pread(int fd, void *buf, size_t count, off_t offset);
+ 
+ fd is the file descriptor of the file
+ buff is the buffer
+ count is how much you want to read in
+ offset is basically the offset from the beginning of the file.
+ */
 
 
 
@@ -802,8 +804,8 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 int getFreeBlock(){
     int i = 0;
     for(;i<maxDiskBlocks;i++){
-        if(dataBitmap[i] == 0){
-            dataBitmap[i] == 1;
+        if(dataBitmap[i] == '0'){
+            dataBitmap[i] == '1';
             return i;
         }
     }
@@ -829,7 +831,7 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
               struct fuse_file_info *fi)
 {
     fprintf(stderr, "write (){ \n");
-
+    
     int retstat = 0;
     
     log_msg("\nsfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
@@ -877,7 +879,7 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
         if(sizeBetween < numberOfBytesRemaining){       //need to read all the memory in this block and move onto the next one
             
             /**
-              the buffer from the diskfile
+             the buffer from the diskfile
              */
             pwrite(diskfile, buf+buffOffset, sizeBetween, currDiskBlock*BLOCK_SIZE);
             
@@ -905,7 +907,7 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
         }
     }
     fprintf(stderr, "}\n");
-
+    
     return numberOfBytesWritten;
 }
 
@@ -933,12 +935,12 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
  Return one or more directory entries (struct dirent) to the call
  
  Args:
-    path:    what folder to open
-    buf:     holds dirent structs
-    filler:  insert directory entries into the directory structure, 
-             which is also passed to your callback as buf.
-    offset:  ignore this
-    fi:      ignore this too
+ path:    what folder to open
+ buf:     holds dirent structs
+ filler:  insert directory entries into the directory structure,
+ which is also passed to your callback as buf.
+ offset:  ignore this
+ fi:      ignore this too
  
  
  
@@ -951,26 +953,26 @@ int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offse
                 struct fuse_file_info *fi)
 {
     fprintf(stderr, "readdir () \n");
-
+    
     int retstat = 0;
     
     //Fill out a dirent linked list structure.
-/*
+    /*
      struct dirent {
-        ino_t          d_ino;        inode number
-        off_t          d_off;        offset to the next dirent
-        unsigned short d_reclen;     length of this record
-        unsigned char  d_type;       type of file; not supported
-                                     by all file system types
-        char           d_name[256];
-    };
+     ino_t          d_ino;        inode number
+     off_t          d_off;        offset to the next dirent
+     unsigned short d_reclen;     length of this record
+     unsigned char  d_type;       type of file; not supported
+     by all file system types
+     char           d_name[256];
+     };
      
      
      Algo:
-        get all the elements of the directory 
-        fill out information about them in the dirent struct (just the name)
+     get all the elements of the directory
+     fill out information about them in the dirent struct (just the name)
      
-*/
+     */
     int currDirInode = findINode(path,0);
     int i = 0;
     struct inode * currdirectoryInode = &inodeTable[currDirInode];
@@ -1004,7 +1006,7 @@ int sfs_mkdir(const char *path, mode_t mode)
             path, mode);
     fprintf(stderr, "mkdir (){ \n");
     fprintf(stderr, "}\n");
-
+    
     
     
     return retstat;
@@ -1020,7 +1022,7 @@ int sfs_rmdir(const char *path)
     
     fprintf(stderr, "rmdir (){ \n");
     fprintf(stderr, "}\n");
-
+    
     
     return retstat;
 }
@@ -1040,7 +1042,7 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
             path, fi);
     fprintf(stderr, "opendir () {\n");
     fprintf(stderr, "}\n");
-
+    
     
     
     return retstat;
@@ -1054,9 +1056,9 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
 int sfs_releasedir(const char *path, struct fuse_file_info *fi)
 {
     fprintf(stderr, "releasedir () {\n");
-
+    
     fprintf(stderr, "}\n");
-
+    
     int retstat = 0;
     
     
