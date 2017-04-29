@@ -211,7 +211,7 @@ void *sfs_init(struct fuse_conn_info *conn)
         root = &inodeTable[0];
     }else{
         
-        fprintf(stderr, "\t this file system has not been initalized. super block init value is %d \n",superBlock.init);
+        fprintf(stderr, "\t this file system has been initalized. super block init value is %d \n",superBlock.init);
         
         //Step 1) Read the root directory struct at block 1
         
@@ -362,6 +362,49 @@ int sfs_getattr(const char *path, struct stat *statbuf)
     
     return retstat;//0
 }
+
+/*
+  I rewrote the findInode method cause the other one keep bugging out. 
+  Basically no matter what if we accept only sing directory support then it will be / filename
+ 
+ example)
+ 
+  touch ././././././mountdir/bbb.b , touch /mountdir/bbb.b, touch mountdir/bbb.b
+ 
+ they all search for the string /bbb.b
+ 
+*/
+int findINode(const char *path, int currentLocation){
+        fprintf(stderr, "findInode(){ %s \n", path);
+        
+        int i = 0;
+    
+        const char * filename = (path+1);
+
+        for (; i < 31; i++) {
+            if(rootDir.table[i].inodeNumber == -1){continue;}
+            fprintf(stderr, "\t comparing %s with %s }\n",filename, rootDir.table[i].fileName);
+        
+        
+            if ( strcmp(filename, rootDir.table[i].fileName) == 0){
+                fprintf(stderr, "\t find inode %d }", rootDir.table[i].inodeNumber);
+
+                return rootDir.table[i].inodeNumber;
+            }
+        }
+        return -1; //not found
+}
+
+
+
+
+
+
+
+
+
+
+
 /*
  Given a path get the inode that represents it.
  return -1 on err
@@ -393,7 +436,10 @@ int sfs_getattr(const char *path, struct stat *statbuf)
  
  
  */
+/*
 int findINode(const char *path, int currentLocation){
+    fprintf(stderr, "findInode(){ %s \n", path);
+
     int len = strlen(path);//length of current path
     int i = 0;
     
@@ -434,33 +480,35 @@ int findINode(const char *path, int currentLocation){
     }
     
     
-    /**
-     1
-     for each character in path                             photos/water.jpg
-     if there is a slash
-     substring = get the substring up to that slash  photos
-     check if it exists in parent dir
-     findINode(less of a path, and inode)        findINode(water.jpg,1)
-     
-     
-     if it gets here there is no slash
-     check if it is in parentDirectory
-     return i node number
-     else
-     return -1
-     
-     */
     
+    // 1
+    // for each character in path                             photos/water.jpg
+    // if there is a slash
+    // substring = get the substring up to that slash  photos
+    // check if it exists in parent dir
+    // findINode(less of a path, and inode)        findINode(water.jpg,1)
+     
+     
+    // if it gets here there is no slash
+    // check if it is in parentDirectory
+    // return i node number
+    // else
+    // return -1
+     
+     
+    fprintf(stderr, "} \n");
+
     
     return result;
 }
+*/
 
-
+/*
 int findchild (const int current_dir, char * child) {
-    /*
-     get current directory's files and loop until
-     you find the file or directory name that matches the child name
-     */
+ 
+    // get current directory's files and loop until
+    // you find the file or directory name that matches the child name
+ 
     int i = 0;
     
     
@@ -472,12 +520,20 @@ int findchild (const int current_dir, char * child) {
     directory * curr = inodeTable[current_dir].dir;
     
     for (; i < 31; i++) {
+        if(curr->table[i].inodeNumber == -1){continue;}
+        fprintf(stderr, "comparing %s with %s \n",child, curr->table[i].fileName);
+
+        
         if ( strcmp(child, curr->table[i].fileName) == 0)
             return curr->table[i].inodeNumber;
     }
     
     return -1;
 }
+*/
+
+
+
 
 void addFileToRoot (const char * fileName, int fileInodeNumber){
     int i =0;
