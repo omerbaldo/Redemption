@@ -140,7 +140,7 @@ void *sfs_init(struct fuse_conn_info *conn)
               superBlock.s_magic = getpid();    									 //magic number is process number
               superBlock.s_maxbytes = BLOCK_SIZE * maxDiskBlocks;  //6kb is max file size
               superBlock.s_blocksize = BLOCK_SIZE;  							 //512 bytes
-                    superBlock.init = 2017;															 //Block has been initiliazed
+              superBlock.init = 2017;															 //Block has been initiliazed
           
       
           //Step 3) Set the root directory
@@ -154,7 +154,14 @@ void *sfs_init(struct fuse_conn_info *conn)
               inodeTable[0].block_amount = 0; 										 //Directory has no blocks
               inodeTable[0].group_id = getegid(); 								//Permissions 
               inodeTable[0].mode = S_IFDIR | S_IRWXU | S_IRWXG;
-                      //First entry in a directory table is i
+            
+                        //set up root directory
+                        int i = 0;
+                        for(;i<31;i++){
+                            rootDir.table[i].inodeNumber = -1;
+                        }
+            
+                        //First entry in a directory table is i
                         rootDir.table[0].inodeNumber = 0;
                         rootDir.table[0].fileName[0] = '.';
                         rootDir.table[0].fileName[1] = '\0';
@@ -257,10 +264,20 @@ void sfs_destroy(void *userdata)
  * Similar to stat().  The 'st_dev' and 'st_blksize' fields are
  * ignored.  The 'st_ino' field is ignored except if the 'use_ino'
  * mount option is given.
+ 
+ 
+Only Required Things:
+st_mode
+st_uid
+st_gid
+st_nlink
+st_ino
+st_dev
+ 
  */
 int sfs_getattr(const char *path, struct stat *statbuf)
 {
-    fprintf(stderr, "getattr(){\n");
+    fprintf(stderr, "getattr() searching for %s {\n", path);
 
     log_msg("\nsfs_getattr(path=\"%s\", statbuf=0x%08x)\n",
             path, statbuf);
@@ -282,32 +299,10 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         statbuf->st_ino = 0;                //File serial number.
         statbuf->st_nlink = 1;              //Number of hard links to the file.
         
-        if(root == NULL){
-            fprintf(stderr, "\t root is null\n");
-
-        }else{
-            fprintf(stderr, "\t root is good!! \n");
-
-        }
-
         statbuf->st_mode = root->mode;      //Mode of file. (file type and permissions)
-        fprintf(stderr, "\t 1 ?\n");
-
         statbuf->st_uid = root->user_id;    //user id
-
-        fprintf(stderr, "\t 2 ?\n");
-
         statbuf->st_gid = root->group_id;   //group id
 
-        fprintf(stderr, "\t 3 ?\n");
-
-        /*
-            statbuf->st_size = root->fileSize; //file size
-            statbuf->st_blocks = root->block_amount; //number of blocks allocated for this file
-            statbuf->st_atime = root->lastAccess;
-            statbuf->st_mtime = root->modified;
-            statbuf->st_ctime = root->created;
-        */
         
     } else {
         fprintf(stderr, "\t We are looking for another file\n");
@@ -315,9 +310,12 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         int result = findINode(path, currentDirectory);
         
         if (result == -1) {
-            log_msg("\tError: path does not exist\n");
+            fprintf(stderr, "\t Error file does not exsist\n");
 
-            return;
+            //log_msg("\tError: path does not exist\n");
+
+            return -ENOENT;
+            //ENOENT; // no file or directory
         }
         
         node = &inodeTable[result];
@@ -329,13 +327,7 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         statbuf->st_mode = node->mode;//Mode of file. (file type and permissions)
         statbuf->st_uid = node->user_id;//user id
         statbuf->st_gid = node->group_id;//group id
-        statbuf->st_size = node->fileSize; //file size
-        statbuf->st_blocks = node->block_amount; //number of blocks allocated for this file
         
-        //time
-        statbuf->st_atime = node->lastAccess;
-        statbuf->st_mtime = node->modified;
-        statbuf->st_ctime = node->created;
     }
  
     fprintf(stderr, "}\n");
@@ -459,6 +451,32 @@ int findchild (const int current_dir, char * child) {
     return -1;
 }
 
+void addDirectoryToRoot (const char * fileName, int fileInodeNumber){
+    int i =0;
+    for(i<31;i++){
+        if(rootDir.table[i].inodeNumber==-1){
+            //its free
+            rootDir.table[i].inodeNumber = fileInodeNumber;
+           
+            memcpy(rootDir.table[i], fileName, strlen(fileName)+1);
+
+            
+            rootDir.table[i].fileName
+            return;
+        }
+    }
+        
+    //here do memory indirection
+    
+    
+}
+
+
+
+
+
+
+
 /**
  * Create and open a file
  *
@@ -474,6 +492,8 @@ int findchild (const int current_dir, char * child) {
 int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
     int retstat = 0;
+    fprintf(stderr, "create() searching for %s {\n", path);
+
     log_msg("\nsfs_create(path=\"%s\", mode=0%03o, fi=0x%08x)\n",
             path, mode, fi);
 
@@ -502,13 +522,24 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
                     fi->fh = i;
                     
                     inodeBitmap[i] = 1;//not free
+                    
+                    
+                    //add to the root directory.
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    fprintf(stderr, "\t returning inode # %d \n}\n", i);
                     return 0;
                 }
             }
         }
 
     //Step 2) If it does exist just return -1
-    printf("File Already exists\n");
     return -1;
 }
 
@@ -516,6 +547,8 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 /** Remove a file */
 int sfs_unlink(const char *path)
 {
+    fprintf(stderr, "unlink (){ \n");
+
     int retstat = 0;
     log_msg("sfs_unlink(path=\"%s\")\n", path);
     
@@ -535,6 +568,8 @@ int sfs_unlink(const char *path)
     for(;j<12;j++){
         inodeTable[result].pointers[j] = -1;
     }
+
+    fprintf(stderr, "} \n");
 
     return 0;
    
@@ -565,6 +600,8 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
 
     log_msg("\nsfs_open(path\"%s\", fi=0x%08x)\n",
             path, fi);
+    fprintf(stderr, "open (){ \n");
+
     
     //set fd to inode # associated with the file
    fd = findINode(path, currentDirectory);
@@ -582,6 +619,7 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
         return -1;
    }
     fi->fh = fd;    //set file descriptor to inode #
+    fprintf(stderr, "} \n");
 
   return retstat;
 }
@@ -605,6 +643,8 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
     int retstat = 0;
     log_msg("\nsfs_release(path=\"%s\", fi=0x%08x)\n",
             path, fi);
+    fprintf(stderr, "sfs release (){ \n");
+
     
     int result;
     
@@ -615,6 +655,7 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
         printf("Error closing file descriptor\n");
         return -1;
     }
+    fprintf(stderr, "} \n");
 
     return retstat;
 }
@@ -657,6 +698,8 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
 int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
     int retstat = 0;
+    fprintf(stderr, "read (){ \n");
+
     log_msg("\nsfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
             path, buf, size, offset, fi);
     
@@ -728,6 +771,8 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
             }
         }
     
+    fprintf(stderr, "} \n");
+
     return numberOfBytesRead;
 }
 /**
@@ -774,7 +819,10 @@ int getFreeBlock(){
 int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
               struct fuse_file_info *fi)
 {
+    fprintf(stderr, "write (){ \n");
+
     int retstat = 0;
+    
     log_msg("\nsfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
             path, buf, size, offset, fi);
     
@@ -847,7 +895,8 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
             break;
         }
     }
-    
+    fprintf(stderr, "}\n");
+
     return numberOfBytesWritten;
 }
 
@@ -892,6 +941,8 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
 int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
                 struct fuse_file_info *fi)
 {
+    fprintf(stderr, "readdir () \n");
+
     int retstat = 0;
     
     //Fill out a dirent linked list structure.
@@ -942,6 +993,9 @@ int sfs_mkdir(const char *path, mode_t mode)
     int retstat = 0;
     log_msg("\nsfs_mkdir(path=\"%s\", mode=0%3o)\n",
             path, mode);
+    fprintf(stderr, "mkdir (){ \n");
+    fprintf(stderr, "}\n");
+
     
     
     return retstat;
@@ -955,6 +1009,9 @@ int sfs_rmdir(const char *path)
     log_msg("sfs_rmdir(path=\"%s\")\n",
             path);
     
+    fprintf(stderr, "rmdir (){ \n");
+    fprintf(stderr, "}\n");
+
     
     return retstat;
 }
@@ -972,6 +1029,9 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
     int retstat = 0;
     log_msg("\nsfs_opendir(path=\"%s\", fi=0x%08x)\n",
             path, fi);
+    fprintf(stderr, "opendir () {\n");
+    fprintf(stderr, "}\n");
+
     
     
     return retstat;
@@ -984,6 +1044,10 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
  */
 int sfs_releasedir(const char *path, struct fuse_file_info *fi)
 {
+    fprintf(stderr, "releasedir () {\n");
+
+    fprintf(stderr, "}\n");
+
     int retstat = 0;
     
     
