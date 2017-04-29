@@ -105,6 +105,7 @@ void *sfs_init(struct fuse_conn_info *conn)
     fprintf(stderr, "in bb-init\n");
     log_msg("\nsfs_init()\n");
     
+    
     //Step 0) Create connection
         log_conn(conn);
         log_fuse_context(fuse_get_context());
@@ -203,7 +204,7 @@ void *sfs_init(struct fuse_conn_info *conn)
             log_msg("\tThis system has been initalized . The init value is");
             
             if(superBlock.init == 2017){
-                log_msg("2017");
+                log_msg(" = %d", superBlock.init);
             }
             
     }
@@ -262,10 +263,7 @@ int sfs_getattr(const char *path, struct stat *statbuf)
     
     if(superBlock.init == 2017){
         log_msg("\tWe good in get attr. values are read in correct\n");
-    }else{
-        log_msg("\tWe are not in get attr. values are read in correct\n");
     }
-    
     int retstat = 0;
     char fpath[PATH_MAX];
     inode * node;
