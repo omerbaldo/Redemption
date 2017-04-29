@@ -195,7 +195,8 @@ void *sfs_init(struct fuse_conn_info *conn)
             
             ptr = (void *) &inodeTable;
             
-            
+            root = &inodeTable[0];
+
             
             //Step 5) Read the inodes at block 722
             pread(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
@@ -219,6 +220,7 @@ void *sfs_init(struct fuse_conn_info *conn)
  */
 void sfs_destroy(void *userdata)
 {
+    fprintf(stderr, "in bb-destroy\n");
 
     log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
 
@@ -258,11 +260,13 @@ void sfs_destroy(void *userdata)
  */
 int sfs_getattr(const char *path, struct stat *statbuf)
 {
+    fprintf(stderr, "getattr(){\n");
+
     log_msg("\nsfs_getattr(path=\"%s\", statbuf=0x%08x)\n",
             path, statbuf);
     
     if(superBlock.init == 2017){
-        log_msg("\tWe good in get attr. values are read in correct\n");
+        fprintf(stderr, "\t We good in get attr. Values are read in correct \n");
     }
     int retstat = 0;
     char fpath[PATH_MAX];
@@ -270,26 +274,43 @@ int sfs_getattr(const char *path, struct stat *statbuf)
     
     if (strcmp("/",path) == 0) {//root
         
-        log_msg("\tWe looking for root directory\n");
+        fprintf(stderr, "\t We are looking for root directory\n");
+        
+        //Required
+        statbuf->st_dev = 0;                //Device ID of device containing file.
+        statbuf->st_rdev = 0;               //Device ID (if file is character or block special)
+        statbuf->st_ino = 0;                //File serial number.
+        statbuf->st_nlink = 1;              //Number of hard links to the file.
+        
+        if(root == NULL){
+            fprintf(stderr, "\t root is null\n");
 
-        
-        statbuf->st_dev = 0;//Device ID of device containing file.
-        statbuf->st_rdev = 0;//Device ID (if file is character or block special)
-        statbuf->st_ino = 0;//File serial number.
-        statbuf->st_nlink = 1;//Number of hard links to the file.
-        statbuf->st_mode = root->mode;//Mode of file. (file type and permissions)
-        statbuf->st_uid = root->user_id;//user id
-        statbuf->st_gid = root->group_id;//group id
-        statbuf->st_size = root->fileSize; //file size
-        statbuf->st_blocks = root->block_amount; //number of blocks allocated for this file
-        
-        //time
-        statbuf->st_atime = root->lastAccess;
-        statbuf->st_mtime = root->modified;
-        statbuf->st_ctime = root->created;
+        }else{
+            fprintf(stderr, "\t root is good!! \n");
+
+        }
+
+        statbuf->st_mode = root->mode;      //Mode of file. (file type and permissions)
+        fprintf(stderr, "\t 1 ?\n");
+
+        statbuf->st_uid = root->user_id;    //user id
+
+        fprintf(stderr, "\t 2 ?\n");
+
+        statbuf->st_gid = root->group_id;   //group id
+
+        fprintf(stderr, "\t 3 ?\n");
+
+        /*
+            statbuf->st_size = root->fileSize; //file size
+            statbuf->st_blocks = root->block_amount; //number of blocks allocated for this file
+            statbuf->st_atime = root->lastAccess;
+            statbuf->st_mtime = root->modified;
+            statbuf->st_ctime = root->created;
+        */
         
     } else {
-        log_msg("\tWe are looking for another directory\n");
+        fprintf(stderr, "\t We are looking for another file\n");
 
         int result = findINode(path, currentDirectory);
         
@@ -317,7 +338,8 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         statbuf->st_ctime = node->created;
     }
  
-    
+    fprintf(stderr, "}\n");
+
     return retstat;//0
 }
 /*
