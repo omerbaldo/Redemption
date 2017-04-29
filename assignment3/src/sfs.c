@@ -80,6 +80,28 @@ static int currentDirectory = 0;
  4)
  */
 
+void printRootDirElements(){
+    fprintf(stderr, "printRootDirElements() {\n");
+    int i = 0;
+    for(; i<31;i++){
+        fprintf(stderr, "%d  file : %s  Inode Num %d \n", i, rootDir.table[i].fileName, rootDir.table[i].inodeNumber );
+
+    }
+    fprintf(stderr, "}\n");
+
+    
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 //--------------------------------------------------------------------------------
@@ -102,7 +124,7 @@ static int currentDirectory = 0;
 void *sfs_init(struct fuse_conn_info *conn)
 {
 
-    fprintf(stderr, "in bb-init\n");
+    fprintf(stderr, "bb-init(){\n");
     log_msg("\nsfs_init()\n");
     
     
@@ -133,8 +155,8 @@ void *sfs_init(struct fuse_conn_info *conn)
     //Step 2.5) File system has not been initialized
     
         if (hasBeenInitiled == -1){
-                
-              log_msg("\tThis system has not been initalized ()\n");
+              fprintf(stderr, "\t this system has not been initalized \n ");
+
 
                 //Step 2) Set the super block
               superBlock.s_magic = getpid();    									 //magic number is process number
@@ -169,7 +191,7 @@ void *sfs_init(struct fuse_conn_info *conn)
               inodeBitmap[0] = 1;//not free
 
               //Step 4) Null out all the pointers for each inode
-              int i = 0;
+              i = 0;
               for(;i<amountOfINodes;i++){
                   int j = 0;
                   for(;i<12;i++){
@@ -181,7 +203,8 @@ void *sfs_init(struct fuse_conn_info *conn)
               root = &inodeTable[0];
         }else{
             
-            
+            fprintf(stderr, "\t this file system has not been initalized. super block init value is %d \n",superBlock.init);
+
             //Step 1) Read the root directory struct at block 1
             
             void * ptr = (void *) &superBlock;
@@ -208,15 +231,9 @@ void *sfs_init(struct fuse_conn_info *conn)
             //Step 5) Read the inodes at block 722
             pread(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
             
-            
-            log_msg("\tThis system has been initalized . The init value is");
-            
-            if(superBlock.init == 2017){
-                log_msg(" = %d", superBlock.init);
-            }
-            
     }
-    
+    fprintf(stderr, "}\n");
+
     return SFS_DATA;
 }
 
@@ -227,7 +244,7 @@ void *sfs_init(struct fuse_conn_info *conn)
  */
 void sfs_destroy(void *userdata)
 {
-    fprintf(stderr, "in bb-destroy\n");
+    fprintf(stderr, "bb-destroy(){ \n");
 
     log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
 
@@ -255,6 +272,8 @@ void sfs_destroy(void *userdata)
     
     //Step 5) Read the inodes at block 722
     pwrite(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
+    fprintf(stderr, "} \n");
+
 }
 
 
@@ -305,7 +324,8 @@ int sfs_getattr(const char *path, struct stat *statbuf)
 
         
     } else {
-        fprintf(stderr, "\t We are looking for another file\n");
+        fprintf(stderr, "\t We are looking for another file. Here are the things in the directory \n");
+        printRootDirElements();
 
         int result = findINode(path, currentDirectory);
         
@@ -451,17 +471,16 @@ int findchild (const int current_dir, char * child) {
     return -1;
 }
 
-void addDirectoryToRoot (const char * fileName, int fileInodeNumber){
+void addFileToRoot (const char * fileName, int fileInodeNumber){
     int i =0;
-    for(i<31;i++){
+    for(;i<31;i++){
         if(rootDir.table[i].inodeNumber==-1){
             //its free
             rootDir.table[i].inodeNumber = fileInodeNumber;
            
-            memcpy(rootDir.table[i], fileName, strlen(fileName)+1);
-
-            
-            rootDir.table[i].fileName
+            memcpy((void *)&rootDir.table[i], fileName, strlen(fileName)+1);
+            rootDir.table[i].fileName;
+            printRootDirElements();
             return;
         }
     }
@@ -470,11 +489,6 @@ void addDirectoryToRoot (const char * fileName, int fileInodeNumber){
     
     
 }
-
-
-
-
-
 
 
 /**
@@ -492,7 +506,7 @@ void addDirectoryToRoot (const char * fileName, int fileInodeNumber){
 int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
     int retstat = 0;
-    fprintf(stderr, "create() searching for %s {\n", path);
+    fprintf(stderr, "create() adding this file %s {\n", path);
 
     log_msg("\nsfs_create(path=\"%s\", mode=0%03o, fi=0x%08x)\n",
             path, mode, fi);
@@ -523,14 +537,9 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
                     
                     inodeBitmap[i] = 1;//not free
                     
-                    
-                    //add to the root directory.
-                    
-                    
-                    
-                    
-                    
-                    
+                    const char * filename = (path+1);
+
+                    addFileToRoot(filename,i); //add to the root directory.
                     
                     
                     fprintf(stderr, "\t returning inode # %d \n}\n", i);
