@@ -259,6 +259,8 @@ void sfs_destroy(void *userdata)
     //write everything back in to the disk file
     
     //file handle for the disk file
+    
+    
     int diskFileHandle = getDiskFile();
     
     void * ptr = (void *) &superBlock;
@@ -637,10 +639,32 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 }
 
 
+
+
+void removeFileFromRoot (const char * fileName, int fileInodeNumber){
+    fprintf(stderr, "removeFileFromRoot () {\n", fileName, fileInodeNumber);
+
+    int i =0;
+    for(;i<31;i++){
+        if(rootDir.table[i].inodeNumber==fileInodeNumber){
+
+            rootDir.table[i].inodeNumber = -1; //refree
+            fprintf(stderr, "\t Deleting file %s with inode # %d\n", fileName, fileInodeNumber);
+            printRootDirElements();
+            fprintf(stderr, "}\n", fileName, fileInodeNumber);
+            return;
+        }
+    }
+    
+    //here do memory indirection
+    
+    
+}
+
 /** Remove a file */
 int sfs_unlink(const char *path)
 {
-    fprintf(stderr, "unlink (){ \n");
+    fprintf(stderr, "unlink %s (){ \n", path);
     
     int retstat = 0;
     log_msg("sfs_unlink(path=\"%s\")\n", path);
@@ -654,6 +678,11 @@ int sfs_unlink(const char *path)
         printf("path does not exist. Cannot delete\n");
         return -1;
     }
+    
+    //Step 1.5) remove from root dir
+    const char * filename = (path+1); //get rid of /
+
+    removeFileFromRoot(path,result);
     
     //Step 2) If it does exist set inode bitmap to 0
     inodeBitmap[result] = '0';//not free
@@ -1152,27 +1181,32 @@ int sfs_releasedir(const char *path, struct fuse_file_info *fi)
 }
 
 struct fuse_operations sfs_oper = {
-    .init = sfs_init,
-    .destroy = sfs_destroy,
-    .getattr = sfs_getattr,
+    
+    /*
+        To do / Debugg:
+     */
+    
+    .init = sfs_init,           // successful. next add more than 31 directories for root dir (at least 255)
+    .destroy = sfs_destroy,     // successful.
+    .getattr = sfs_getattr,     // successful/sketchy. says times function is not implemented. ask monday whats up with that
     
     //terence
-    .open = sfs_open,
-    .release = sfs_release,
+    .open = sfs_open,           //
+    .release = sfs_release,     //
     
     //kwabe
-    .create = sfs_create,
-    .unlink = sfs_unlink,
+    .create = sfs_create,       // successful
+    .unlink = sfs_unlink,       // successful
     
     //omer
-    .read = sfs_read,
-    .write = sfs_write,
+    .read = sfs_read,           //
+    .write = sfs_write,         //
+    .readdir = sfs_readdir,     //works !
     
     .rmdir = sfs_rmdir,
     .mkdir = sfs_mkdir,
     
     .opendir = sfs_opendir,
-    .readdir = sfs_readdir,
     .releasedir = sfs_releasedir
 };
 
