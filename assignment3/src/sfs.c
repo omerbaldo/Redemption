@@ -385,11 +385,19 @@ int sfs_getattr(const char *path, struct stat *statbuf)
  
 */
 int findINode(const char *path, int currentLocation){
-        fprintf(stderr, "findInode(){ %s \n", path);
+    
+    
+     const char * filename = path;
+    
+    if(*filename == '/'){
+        filename = (filename+1);
+    }
+    
+    
+        fprintf(stderr, "findInode(){ %s \n", filename);
         
         int i = 0;
     
-        const char * filename = (path+1);
 
         for (; i < 31; i++) {
             if(rootDir.table[i].inodeNumber == -1){continue;}
@@ -397,11 +405,15 @@ int findINode(const char *path, int currentLocation){
         
         
             if ( strcmp(filename, rootDir.table[i].fileName) == 0){
-                fprintf(stderr, "\t find inode %d }", rootDir.table[i].inodeNumber);
+                fprintf(stderr, "\t found inode %d }", rootDir.table[i].inodeNumber);
 
                 return rootDir.table[i].inodeNumber;
             }
         }
+    
+    
+    fprintf(stderr, "\t  inode not found returning -1 }");
+
         return -1; //not found
 }
 
@@ -546,6 +558,14 @@ int findchild (const int current_dir, char * child) {
 
 
 void addFileToRoot (const char * fileName, int fileInodeNumber){
+    
+    if(*fileName == '/'){
+        fileName = (fileName+1);
+    }
+    
+    
+    
+    
     int i =0;
     for(;i<31;i++){
         if(rootDir.table[i].inodeNumber==-1){
@@ -603,6 +623,11 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
                 inodeTable[i].type = 'F';                                  //File
                 inodeTable[i].user_id = getuid();                          //User id
                 inodeTable[i].group_id = getegid();                        //Group ID
+                fprintf(stderr, "\t Permissions. File Group  %d File User %d\n",inodeTable[i].group_id,inodeTable[i].user_id);
+
+                
+                
+                
                 inodeTable[i].fileSize = 0;
                 inodeTable[i].lastAccess = time(NULL);
                 inodeTable[i].created = time(NULL);
@@ -623,9 +648,7 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
                 
                 inodeBitmap[i] = '1';//not free
                 
-                const char * filename = (path+1);
-                
-                addFileToRoot(filename,i); //add to the root directory.
+                addFileToRoot(path,i); //add to the root directory.
                 
                 printFirstTenINodes();
                 fprintf(stderr, "\t returning inode # %d \n}\n", i);
@@ -642,6 +665,11 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
 
 void removeFileFromRoot (const char * fileName, int fileInodeNumber){
+    
+    if(*fileName == '/'){
+        fileName = (fileName+1);
+    }
+    
     fprintf(stderr, "removeFileFromRoot () {\n", fileName, fileInodeNumber);
 
     int i =0;
@@ -680,7 +708,6 @@ int sfs_unlink(const char *path)
     }
     
     //Step 1.5) remove from root dir
-    const char * filename = (path+1); //get rid of /
 
     removeFileFromRoot(path,result);
     
@@ -717,6 +744,8 @@ int sfs_unlink(const char *path)
  */
 int sfs_open(const char *path, struct fuse_file_info *fi)
 {
+    fprintf(stderr, "open (){ \n");
+
     int retstat = 0;
     int fd;
     
@@ -726,19 +755,29 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
     
     
     //set fd to inode # associated with the file
+    
+    
     fd = findINode(path, currentDirectory);
     int groupIdCurrrently = getegid();
     int userIdCurrrently = getuid();
     
+    fprintf(stderr, "\t found inode # %d\n", fd);
+
+    
+    fprintf(stderr, "\t Permissions. Group Now %d User Now %d\n",groupIdCurrrently,userIdCurrrently);
+    fprintf(stderr, "\t Permissions. File Group  %d File User %d\n",inodeTable[fd].group_id,inodeTable[fd].user_id);
+
+    
     if(inodeTable[fd].group_id != groupIdCurrrently || inodeTable[fd].user_id != userIdCurrrently){
         //do not have permissions
-        printf("You do not have group or user permissions to open this file\n");
-        return -1;
+        fprintf(stderr, "\t You do not have group or user permissions to open this file\n");
+
+        return -EACCES; //error code for permission denied
     }
     
     if (fd == -1) {
-        printf("Error opening file\n");
-        return -1;
+        fprintf(stderr, "\t Error opening file\n");
+        return -ENOENT; //error for no file exsisting
     }
     fi->fh = fd;    //set file descriptor to inode #
     fprintf(stderr, "} \n");
@@ -767,16 +806,18 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
             path, fi);
     fprintf(stderr, "sfs release (){ \n");
     
+    //do not close the file descriptor. its not a real file descriptor but the inode # that lets us know
+    //where to write in the disk file. that descriptor should always remain open and is closed by FUSE / Block.c
+    //essentially this method should do absolutely nothing.
     
-    int result;
     
-    //closes file descriptor
-    result = close(fi->fh);
-    
+    //result = close(fi->fh);
+    /*
     if (result == -1) {
         printf("Error closing file descriptor\n");
         return -1;
     }
+     */
     fprintf(stderr, "} \n");
     
     return retstat;
@@ -820,7 +861,7 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
 int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
     int retstat = 0;
-    fprintf(stderr, "read (){ \n");
+    fprintf(stderr, "read stuff from inode %d (){ \n",fi->fh);
     
     log_msg("\nsfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
             path, buf, size, offset, fi);
