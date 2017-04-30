@@ -1,6 +1,4 @@
 /*
-
-
  Simple File System
  
  • .init : initialize file system
@@ -331,6 +329,9 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         statbuf->st_mode = root->mode;      //Mode of file. (file type and permissions)
         statbuf->st_uid = root->user_id;    //user id
         statbuf->st_gid = root->group_id;   //group id
+        statbuf->st_atime = root->lastAccess ;   /* time of last access */
+        statbuf->st_mtime = root->created;   /* time of last modification */
+        statbuf->st_ctime = root->modified;   /* time of last status change */
         
         
     } else {
@@ -357,7 +358,12 @@ int sfs_getattr(const char *path, struct stat *statbuf)
         statbuf->st_mode = node->mode;//Mode of file. (file type and permissions)
         statbuf->st_uid = node->user_id;//user id
         statbuf->st_gid = node->group_id;//group id
+        statbuf->st_atime = node->lastAccess ;   /* time of last access */
+        statbuf->st_mtime = node->created;   /* time of last modification */
+        statbuf->st_ctime = node->modified;   /* time of last status change */
+
         
+
     }
     
     fprintf(stderr, "}\n");
@@ -601,7 +607,14 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
                 inodeTable[i].modified = time(NULL);
                 inodeTable[i].block_amount = 0;
                 inodeTable[i].group_id = getegid();
-                inodeTable[i].mode = S_IFDIR | S_IRWXU | S_IRWXG;
+                
+                /*
+                   S_IFREG =  regular file
+                   S_IRWXU =  read, write, execute/search by owner
+                   S_IRWXG =  read, write, execute/search by group
+ 
+                 */
+                inodeTable[i].mode = S_IFREG | S_IRWXU | S_IRWXG;
                 
                 inodeTable[i].inode_number = i;
                 fi->fh = i;
@@ -1003,6 +1016,22 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
  
  Return one or more directory entries (struct dirent) to the call
  
+ struct dirent {
+ ino_t          d_ino;        inode number
+ off_t          d_off;        offset to the next dirent
+ unsigned short d_reclen;     length of this record
+ unsigned char  d_type;       type of file; not supported
+ by all file system types
+ char           d_name[256];
+ };
+ 
+ 
+ Algo:
+ get all the elements of the directory
+ fill out information about them in the dirent struct (just the name)
+ 
+ 
+
  Args:
  path:    what folder to open
  buf:     holds dirent structs
@@ -1021,50 +1050,38 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
 int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
                 struct fuse_file_info *fi)
 {
-    fprintf(stderr, "readdir () \n");
+    fprintf(stderr, "readdir (){ \n");
     
-    int retstat = 0;
-    
-    //Fill out a dirent linked list structure.
-    /*
-     struct dirent {
-     ino_t          d_ino;        inode number
-     off_t          d_off;        offset to the next dirent
-     unsigned short d_reclen;     length of this record
-     unsigned char  d_type;       type of file; not supported
-     by all file system types
-     char           d_name[256];
-     };
-     
-     
-     Algo:
-     get all the elements of the directory
-     fill out information about them in the dirent struct (just the name)
-     
-     */
-    int currDirInode = findINode(path,0);
-    int i = 0;
-    struct inode * currdirectoryInode = &inodeTable[currDirInode];
-    directory * currdirectory = currdirectoryInode->dir;
+    //Step 1. Count how much files exsist
     struct dirent temp;
-    int inodenum = 0;
+    int amount_of_elements = 0;
+    int inode_nums[31];
+    int i = 1;
+    for(i = 1;i<31;i++){//start at 1 so you dont include directory itself
+        if(rootDir.table[i].inodeNumber != -1){
+            amount_of_elements++;
+        }
+    }
     
-    
-    for(;i<31;i++){
-        if(currdirectory->table[i].inodeNumber != -1){//directory element
+    int offset_mult = 0;
+    for(i = 1;i<31;i++){//start at 1 so you dont include directory itself
+        if(rootDir.table[i].inodeNumber != -1){//directory element
             
             
-            
-            memcpy(temp.d_name,currdirectory->table[i].fileName, 10);
-            temp.d_ino = currdirectory->table[i].inodeNumber;           //inode #
+            memcpy(temp.d_name,rootDir.table[i].fileName, 10);
+            temp.d_ino = rootDir.table[i].inodeNumber;           //inode #
+            temp.d_off = sizeof(struct dirent);
             
             //buffer, dirent, pointer to struct stat or null, offset to next directory entry
             if(filler(buf, temp.d_name, NULL, 0)!= 0){
-                retstat = -ENOMEM;
+                return -ENOMEM;
             }
+            offset_mult++;
         }
     }
-    return retstat;
+    
+    fprintf(stderr, "} \n");
+    return 0;
 }
 
 /** Create a directory */
