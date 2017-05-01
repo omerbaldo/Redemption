@@ -210,10 +210,6 @@ void *sfs_init(struct fuse_conn_info *conn)
         //Step 5) Set root pointer, and make the pointer to its directory
         inodeTable[0].dir = &rootDir;     //directory pointer if file is directory
         root = &inodeTable[0];
-        
-        ftruncate(diskFileHandle, (722*BLOCK_SIZE));
-        
-        
     }else{
         
         fprintf(stderr, "\t this file system has been initalized. super block init value is %d \n",superBlock.init);
@@ -239,8 +235,7 @@ void *sfs_init(struct fuse_conn_info *conn)
         ptr = (void *) &inodeTable;
         
         root = &inodeTable[0];
-        fprintf(stderr, "size of inode Table %d \n ",sizeof(inodeTable) );
-
+        
         
         //Step 5) Read the inodes at block 722
         pread(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
@@ -287,8 +282,6 @@ void sfs_destroy(void *userdata)
     ptr = (void *) &inodeTable;
     
     //Step 5) Read the inodes at block 722
-    
-    
     pwrite(diskFileHandle, ptr, sizeof(inodeTable), 70*BLOCK_SIZE);
     fprintf(stderr, "} \n");
     
@@ -882,11 +875,6 @@ int getBlockRead(int inode_num, int blockIndex){
  */
 int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
-    
-    
-
-    
-    
     //Step 0) Loging ------------------------------------------------------------------
         fprintf(stderr, "read (){ \n");
         fprintf(stderr, "\t path: %s  \n",path);
@@ -901,7 +889,7 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
     
         int inodeNum = fi->fh;
         int diskfile = getDiskFile();
-    
+        
         inode * NODE = &inodeTable[inodeNum];
         // current inode for open file
         
@@ -936,14 +924,8 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 
     
     
-    char * name = (char *)malloc(5);
-    pread(diskfile,name,sizeof(name),(722+currDiskBlock)*BLOCK_SIZE);
-    buf = name;
-    return 5;
-    
-    
-    
-    pread(diskfile, ptr, 4, (722+currDiskBlock)*BLOCK_SIZE);
+    /*
+    pread(diskfile, ptr, 12, (732+currDiskBlock)*BLOCK_SIZE);
 
     fprintf(stderr, "0) reading in %c  \n", *(buf));
     fprintf(stderr, "1) reading in %c  \n", *(buf+1));
@@ -956,19 +938,18 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
     
     
     
-    return 0;
-    
-    
+    return 12;
+    */
     
     do{
         sizeBetween = BLOCK_SIZE - byteOffset;
         
         if(sizeBetween >= bytesRemaining){
-            fprintf(stderr, "reading at offset %d, about %d bytes at %d \n", (buffOffset),bytesRemaining, ((722+currDiskBlock)*BLOCK_SIZE));
+            fprintf(stderr, "reading at offset %d, about %d bytes at %d \n", (buf+buffOffset),bytesRemaining, ((732+currDiskBlock)*BLOCK_SIZE));
             
 
 
-            pread(diskfile, buf+buffOffset, bytesRemaining, (722+currDiskBlock)*BLOCK_SIZE);
+            pread(diskfile, buf+buffOffset, bytesRemaining, (732+currDiskBlock)*BLOCK_SIZE);
             
             fprintf(stderr, "0) reading in %c  \n", *(buf));
             fprintf(stderr, "1) reading in %c  \n", *(buf+1));
@@ -981,10 +962,10 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
             bytesRemaining -= bytesRemaining;
             return bytesRead;
         }else if (sizeBetween < bytesRemaining){
-            fprintf(stderr, "reading at offset %d, about %d bytes at %d \n", (buffOffset),sizeBetween, ((722+currDiskBlock)*BLOCK_SIZE));
+            fprintf(stderr, "reading at offset %d, about %d bytes at %d \n", (buf+buffOffset),sizeBetween, ((732+currDiskBlock)*BLOCK_SIZE));
             
 
-            pread(diskfile, buf+buffOffset, sizeBetween, (722+currDiskBlock)*BLOCK_SIZE);
+            pread(diskfile, buf+buffOffset, sizeBetween, (732+currDiskBlock)*BLOCK_SIZE);
 
             fprintf(stderr, "0) reading in %c  \n", *(buf));
             fprintf(stderr, "1) reading in %c  \n", *(buf+1));
@@ -1008,7 +989,7 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
         }else{
             fprintf(stderr, "No next block return %d bytes read  \n", bytesRead);
 
-            return 12;
+            return bytesRead;//err
         }
         
         
@@ -1033,17 +1014,10 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 
 
 int getFreeBlock(){
-    fprintf(stderr, "\t \t  getFreeBlock()  \n");
-
     int i = 0;
     for(;i<maxDiskBlocks;i++){
         if(dataBitmap[i] == '0'){
-            
-            
-            fprintf(stderr, "\t \t  \t returning i %d \n", i);
-
-            
-            dataBitmap[i] = '1';
+            dataBitmap[i] == '1';
             return i;
         }
     }
@@ -1155,15 +1129,7 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
     
             int buffOffset = 0;
     
-    char name[5];
-    name[0] = 'o';
-    name[1] = 'm';
-    name[2] = 'e';
-    name[3] = 'r';
-    name[4] = '\0';
-    pwrite(diskfile,name,sizeof(name),(722+currDiskBlock)*BLOCK_SIZE);
-    
-    /*
+   /*
     fprintf(stderr, "0) writing in %c  \n", *(buf));
     fprintf(stderr, "1) writing in %c  \n", *(buf+1));
     fprintf(stderr, "2) writing in %c  \n", *(buf+2));
@@ -1173,17 +1139,16 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
     
     void * ptr = (void *) &(buf);
     
+    
+    pwrite(diskfile, ptr, 12, (732+currDiskBlock)*BLOCK_SIZE);
+    
+    
+    
+    
+    
+    
+    return 12;
     */
-   // pwrite(diskfile, ptr, size, (722+currDiskBlock)*BLOCK_SIZE);
-    
-    
-    
-    
-    
-    
-    return 5;
-    
-    
     
     
     do{
@@ -1197,20 +1162,20 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
             fprintf(stderr, "4) writing in %c  \n", *(buf+4));
             fprintf(stderr, "5) writing in %c  \n", *(buf+5));
 
-            fprintf(stderr, "reading at offset %d, about %d bytes at %d \n", (buffOffset),bytesRemaining, ((732+currDiskBlock)*BLOCK_SIZE));
+            fprintf(stderr, "reading at offset %d, about %d bytes at %d \n", (buf+buffOffset),bytesRemaining, ((732+currDiskBlock)*BLOCK_SIZE));
 
 
 
-            pwrite(diskfile, buf+buffOffset, bytesRemaining, (722+currDiskBlock)*BLOCK_SIZE);
+            pwrite(diskfile, buf+buffOffset, bytesRemaining, (732+currDiskBlock)*BLOCK_SIZE);
             bytesWritten += bytesRemaining;
             bytesRemaining -= bytesRemaining;
             return bytesWritten;
         }else if (sizeBetween < bytesRemaining){
             fprintf(stderr, "2) writing in %c \n", buf);
-            fprintf(stderr, "reading at offset %d, about %d bytes at %d \n", (buffOffset),sizeBetween, ((722+currDiskBlock)*BLOCK_SIZE));
+            fprintf(stderr, "reading at offset %d, about %d bytes at %d \n", (buf+buffOffset),sizeBetween, ((732+currDiskBlock)*BLOCK_SIZE));
 
 
-            pwrite(diskfile, buf+buffOffset, sizeBetween, (722+currDiskBlock)*BLOCK_SIZE);
+            pwrite(diskfile, buf+buffOffset, sizeBetween, (732+currDiskBlock)*BLOCK_SIZE);
 
             bytesWritten += sizeBetween;
             bytesRemaining -= sizeBetween;
@@ -1369,16 +1334,6 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
 }
 
 
-
-
-int sfs_truncate(const char *path,  off_t offset){
-    return 0;
-}
-
-
-
-
-
 /** Release directory
  *
  * Introduced in version 2.3
@@ -1417,7 +1372,6 @@ struct fuse_operations sfs_oper = {
     .read = sfs_read,           //
     .write = sfs_write,         //
     .readdir = sfs_readdir,     //works !
-    .truncate = sfs_truncate,
     
     .rmdir = sfs_rmdir,
     .mkdir = sfs_mkdir,

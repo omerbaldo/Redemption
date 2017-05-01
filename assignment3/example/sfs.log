@@ -9,56 +9,77 @@ sfs_init()
     capable = 00000ffb
     want = 00000010
     context:
-    fuse = 01e62520
+    fuse = 00dde520
     uid = 0
     gid = 0
     pid = 0
-    private_data = 01e62010
-    logfile = 01e62030
+    private_data = 00dde010
+    logfile = 00dde030
     diskfile = /ilab/users/osb5/os/Project_3/assignment3/testfsfile
     umask = 00000
 
-sfs_getattr(path="/", statbuf=0x5fffec10)
+sfs_getattr(path="/bbb.b", statbuf=0x19b32c40)
 
-sfs_getattr(path="/", statbuf=0x64801c10)
+sfs_open(path"/bbb.b", fi=0x1a333cf0)
 
-sfs_getattr(path="/", statbuf=0x5fffec10)
+sfs_write(path="/bbb.b", buf=0x1af23060, size=12, offset=0, fi=0x19b32d70)
 
-sfs_getattr(path="/", statbuf=0x64801c10)
+sfs_release(path="/bbb.b", fi=0x1a333cf0)
 
-sfs_getattr(path="/", statbuf=0x5fffec10)
+sfs_getattr(path="/bbb.b", statbuf=0x19b32c40)
 
-sfs_getattr(path="/", statbuf=0x64801c10)
+sfs_open(path"/bbb.b", fi=0x1a333cf0)
 
-sfs_getattr(path="/bbb.b", statbuf=0x5fffec40)
+sfs_write(path="/bbb.b", buf=0x0c000af0, size=4096, offset=0, fi=0x19b32cf0)
 
-sfs_getattr(path="/bbb.b", statbuf=0x64801c40)
+sfs_release(path="/bbb.b", fi=0x1a333cf0)
 
-sfs_getattr(path="/", statbuf=0x5fffec10)
+sfs_getattr(path="/bbb.b", statbuf=0x19b32c40)
 
-sfs_getattr(path="/", statbuf=0x12151c10)
+sfs_open(path"/bbb.b", fi=0x1a333cf0)
 
-sfs_getattr(path="/", statbuf=0x12952c10)
+sfs_write(path="/bbb.b", buf=0x1af23060, size=12, offset=0, fi=0x19b32d70)
 
-sfs_opendir(path="/", fi=0x12151c30)
-uf=0x64801c10)
+sfs_release(path="/bbb.b", fi=0x1a333cf0)
 
-sfs_getattr(path="/bbb.b", statbuf=0x5fffec40)
+sfs_getattr(path="/bbb.b", statbuf=0x19b32c40)
 
-sfs_getattr(path="/bbb.b", statbuf=0x64801c40)
+sfs_open(path"/bbb.b", fi=0x1a333cf0)
 
-sfs_getattr(path="/", statbuf=0x5fffec10)
+sfs_write(path="/bbb.b", buf=0x0c000af0, size=4096, offset=0, fi=0x19b32cf0)
 
-sfs_getattr(path="/", statbuf=0x64801c10)
+sfs_release(path="/bbb.b", fi=0x1a333cf0)
 
-sfs_opendir(path="/", fi=0x64801c30)
+sfs_getattr(path="/", statbuf=0x19b32c10)
 
-sfs_getattr(path="/", statbuf=0x5fffec10)
+sfs_opendir(path="/", fi=0x1a333c30)
 
-sfs_getattr(path="/", statbuf=0x64801c10)
+sfs_getattr(path="/file.b", statbuf=0x1a333c40)
 
-sfs_getattr(path="/bbb.b", statbuf=0x5fffec40)
+sfs_getattr(path="/bbb.b", statbuf=0x19b32c40)
 
-sfs_getattr(path="/bbb.b", statbuf=0x64801c40)
+sfs_getattr(path="/file.b", statbuf=0x19b32c40)
 
-sfs_getattr(path="/", statbuf=0x5fffec10)
+sfs_open(path"/file.b", fi=0x1a333cf0)
+
+sfs_write(path="/file.b", buf=0x0c000af0, size=4096, offset=0, fi=0x19b32cf0)
+
+sfs_getattr(path="/file.b", statbuf=0x1a333c10)
+
+sfs_write(path="/file.b", buf=0x0c000af0, size=4096, offset=32768, fi=0x19b32cf0)
+
+sfs_release(path="/file.b", fi=0x1a333cf0)
+
+sfs_getattr(path="/bbb.b", statbuf=0x19b32c40)
+
+sfs_open(path"/bbb.b", fi=0x1a333cf0)
+
+sfs_write(path="/bbb.b", buf=0x0c000af0, size=4096, offset=0, fi=0x19b32cf0)
+
+sfs_getattr(path="/bbb.b", statbuf=0x1a333c10)
+
+sfs_write(path="/bbb.b", buf=0x0c000af0, size=4096, offset=32768, fi=0x19b32cf0)
+
+sfs_release(path="/bbb.b", fi=0x1a333cf0)
+
+sfs_getattr(path="/", statbuf=0x19b32c10)
