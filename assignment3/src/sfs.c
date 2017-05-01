@@ -84,6 +84,7 @@ void printRootDirElements(){
     fprintf(stderr, "printRootDirElements() {\n");
     int i = 0;
     for(; i<31;i++){
+        if(rootDir.table[i].inodeNumber == -1){continue;}
         fprintf(stderr, "%d  file : %s  Inode Num %d \n", i, rootDir.table[i].fileName, rootDir.table[i].inodeNumber );
         
     }
@@ -178,7 +179,7 @@ void *sfs_init(struct fuse_conn_info *conn)
         //ROOT DIR ELEMENTS
         int i = 0;
         for(;i<31;i++){
-            rootDir.table[i].inodeNumber = -1;
+            rootDir.table[i].inodeNumber = -1; //no file exists
         }
         
         //First entry in a directory table is i
@@ -381,7 +382,7 @@ int sfs_getattr(const char *path, struct stat *statbuf)
  
   touch ././././././mountdir/bbb.b , touch /mountdir/bbb.b, touch mountdir/bbb.b
  
- they all search for the string /bbb.b
+ they all search for the string /bbb.b or bbb.b
  
 */
 int findINode(const char *path, int currentLocation){
@@ -563,9 +564,6 @@ void addFileToRoot (const char * fileName, int fileInodeNumber){
         fileName = (fileName+1);
     }
     
-    
-    
-    
     int i =0;
     for(;i<31;i++){
         if(rootDir.table[i].inodeNumber==-1){
@@ -575,8 +573,6 @@ void addFileToRoot (const char * fileName, int fileInodeNumber){
             memcpy((void *)&rootDir.table[i].fileName, fileName, strlen(fileName)+1);
             rootDir.table[i].fileName;
             
-            
-            
             fprintf(stderr, "\t Adding file %s with inode # %d\n", fileName, fileInodeNumber);
             
             printRootDirElements();
@@ -585,8 +581,6 @@ void addFileToRoot (const char * fileName, int fileInodeNumber){
     }
     
     //here do memory indirection
-    
-    
 }
 
 
@@ -704,7 +698,7 @@ int sfs_unlink(const char *path)
     //Step 1) If it doesn't exist just return -1
     if (result == -1) {
         printf("path does not exist. Cannot delete\n");
-        return -1;
+        return -ENOENT;
     }
     
     //Step 1.5) remove from root dir
@@ -712,9 +706,10 @@ int sfs_unlink(const char *path)
     removeFileFromRoot(path,result);
     
     //Step 2) If it does exist set inode bitmap to 0
-    inodeBitmap[result] = '0';//not free
+    inodeBitmap[result] = '0';// freed
     int j = 0;
     for(;j<12;j++){
+        dataBitmap[inodeTable[result].pointers[j]] = '0';
         inodeTable[result].pointers[j] = -1;
     }
     
@@ -758,12 +753,12 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
     
     
     fd = findINode(path, currentDirectory);
+    if(fd <0){return fd;}
+    
     int groupIdCurrrently = getegid();
     int userIdCurrrently = getuid();
     
     fprintf(stderr, "\t found inode # %d\n", fd);
-
-    
     fprintf(stderr, "\t Permissions. Group Now %d User Now %d\n",groupIdCurrrently,userIdCurrrently);
     fprintf(stderr, "\t Permissions. File Group  %d File User %d\n",inodeTable[fd].group_id,inodeTable[fd].user_id);
 
@@ -823,6 +818,26 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
     return retstat;
 }
 
+
+
+int getBlockRead(int inode_num, int blockIndex){
+    
+    inode * NODE = &inodeTable[inode_num];
+    
+    //mem indirection. >6kb
+    if(blockIndex >=12){
+        return -1;
+    }
+    
+    if(NODE->pointers[blockIndex] == -1){
+        return -1;
+    }
+    
+    //has another block
+    return NODE->pointers[blockIndex];
+}
+
+
 /** Read data from an open file
  *
  * Read should return exactly the number of bytes requested except
@@ -860,83 +875,83 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
  */
 int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
-    int retstat = 0;
-    fprintf(stderr, "read stuff from inode %d (){ \n",fi->fh);
+    //Step 0) Loging ------------------------------------------------------------------
+        fprintf(stderr, "read (){ \n");
+        fprintf(stderr, "\t path: %s  \n",path);
+        fprintf(stderr, "\t inode #: %d  \n",fi->fh);
+        fprintf(stderr, "\t offset: %d  \n", offset);
+        fprintf(stderr, "\t size: %d  \n", size);
     
-    log_msg("\nsfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
-            path, buf, size, offset, fi);
+        log_msg("\nsfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
+                path, buf, size, offset, fi);
     
-    int fileDescriptor = fi->fh;                            // file descriptor or inode #
-    inode * currFile = &inodeTable[fileDescriptor];          // current inode for open file
+    //Step 1) Define Your Variables ---------------------------------------------------
+    
+        int inodeNum = fi->fh;
+        int diskfile = getDiskFile();
+        
+        inode * NODE = &inodeTable[inodeNum];
+        // current inode for open file
+        
+        int blockIndex = ((int)offset/(int)BLOCK_SIZE);
+        fprintf(stderr, "block Index  %d \n", blockIndex);
+    
+        //ex. trunc(1000/512) means start at index 1
+        int byteOffset = offset % BLOCK_SIZE;
+        fprintf(stderr, "byte offset   %d \n", byteOffset);
     
     
-    //Step 1) Set variables
+    //try to get the block that represents this
+    int currDiskBlock = getBlockRead(inodeNum,blockIndex);
+    if (currDiskBlock < 0){
+        fprintf(stderr, "returning error \n", currDiskBlock);
+        
+        return 0;//err
+    }
+    fprintf(stderr, "got block %d \n", currDiskBlock);
     
-    int diskfile = getDiskFile();
     
-    int currDiskBlockIndex = ((int)offset/(int)BLOCK_SIZE);   //ex. trunc(1000/512) means start at index 1
-    //(first block that current thread owns)
+    int bytesRemaining = size;
     
-    int currDiskBlock = currFile->pointers[currDiskBlockIndex];  // what block to start out at in pointer list. ex 1000/512
-    //  will tell you to start at block 1
+    int bytesRead = 0;
     
-    int byteOffset = offset % BLOCK_SIZE;      //   this is where to start in that block
-    
-    int numberOfBytesRead = 0;                //    number of bytes read in
-    
-    int numberOfBytesRemaining = size;       //     number of bytes read in
+    int numberOfBytesRemaining = size;
     
     int sizeBetween = 0;
     
     int buffOffset = 0;
     
-    //Step 2) Read bytes in so long as their less than the size of the file
-    while(numberOfBytesRead < size){
-        sizeBetween = BLOCK_SIZE - byteOffset;          //number of bytes between offset and end of block
+    do{
+        sizeBetween = BLOCK_SIZE - byteOffset;
         
-        if(currDiskBlockIndex>=12){
-            return numberOfBytesRead;
+        if(sizeBetween >= bytesRemaining){
+            pread(diskfile, buf+buffOffset, bytesRemaining, (732+currDiskBlock)*BLOCK_SIZE);
+            bytesRead += bytesRemaining;
+            bytesRemaining -= bytesRemaining;
+            return bytesRead;
+        }else if (sizeBetween < bytesRemaining){
+            pread(diskfile, buf+buffOffset, sizeBetween, (732+currDiskBlock)*BLOCK_SIZE);
+            
+            bytesRead += sizeBetween;
+            bytesRemaining -= sizeBetween;
+            buffOffset += sizeBetween;
+            byteOffset = 0;
         }
-        //check if the current disk block is -1. means nothing else to read
-        if(currDiskBlock == -1){
-            return numberOfBytesRead;
+        
+        //get nxt blck. if theres nothing there add a new one
+        blockIndex++;
+        int response = getBlockRead(inodeNum,blockIndex);
+        if (response >= 0){
+            currDiskBlock = response;
+        }else{
+            return bytesRead;//err
         }
         
         
-        if(sizeBetween < numberOfBytesRemaining){       //need to read all the memory in this block and move onto the next one
-            
-            /**
-             Write to the buffer from the diskfile
-             */
-            pread(diskfile, buf+buffOffset, sizeBetween, (722*BLOCK_SIZE)+(currDiskBlock*BLOCK_SIZE));
-            
-            /**
-             Book Keeping
-             */
-            buffOffset+= sizeBetween; //next time you write, write from the offset on buffer
-            numberOfBytesRemaining -= sizeBetween; //how much bytes we read to the end of the block
-            byteOffset = 0;//start reading bytes from 0
-            
-            /**
-             Get the next disk block that the inode owns
-             */
-            currDiskBlockIndex++;
-            currDiskBlock = currFile->pointers[currDiskBlockIndex];
-            
-            numberOfBytesRead+=sizeBetween;
-            
-        }else if(sizeBetween >= numberOfBytesRemaining){ //need to read numberOfBytesRemaining into the buffer
-            
-            pread(diskfile, buf+buffOffset, numberOfBytesRemaining,(722*BLOCK_SIZE)+currDiskBlock*BLOCK_SIZE);
-            numberOfBytesRead+=numberOfBytesRemaining;
-            
-            break;
-        }
-    }
+    }while(bytesRemaining != 0);
     
-    fprintf(stderr, "} \n");
-    
-    return numberOfBytesRead;
+    fprintf(stderr, "}\n");
+    return size;
 }
 /**
  This func essentially emulates
@@ -966,6 +981,46 @@ int getFreeBlock(){
 
 
 
+/*
+
+ attempt to increment the blockIndex to get the next owned block by the inode
+ 
+ return the actual location or -1 on error
+ 
+*/
+
+int getBlock(int inode_num, int blockIndex){
+   
+    inode * NODE = &inodeTable[inode_num];
+    
+    //mem indirection. >6kb
+    if(blockIndex >=12){
+        return -ENOMEM;
+    }
+    
+    //doesn't have another block
+    if(NODE->pointers[blockIndex] == -1){
+        
+        int indx =getFreeBlock();
+        if(indx == -1){ //no space
+            return -ENOMEM; //no more memory
+        }
+        NODE->pointers[blockIndex]  = indx;
+        return indx;
+    }
+    
+    //has another block
+    return NODE->pointers[blockIndex];
+}
+
+
+
+
+
+
+
+
+
 /** Write data to an open file
  * Write should return exactly the number of bytes requested
  * except on error.  An exception to this is when the 'direct_io'
@@ -982,85 +1037,95 @@ int getFreeBlock(){
 int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
               struct fuse_file_info *fi)
 {
-    fprintf(stderr, "write (){ \n");
-    
-    int retstat = 0;
+    //Step 0) Loging ------------------------------------------------------------------
+        fprintf(stderr, "write (){ \n");
+        fprintf(stderr, "\t path: %s  \n",path);
+        fprintf(stderr, "\t inode #: %d  \n",fi->fh);
+        fprintf(stderr, "\t offset: %d  \n", offset);
+        fprintf(stderr, "\t size: %d  \n", size);
     
     log_msg("\nsfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
             path, buf, size, offset, fi);
     
-    int fileDescriptor = fi->fh;                              // file descriptor or inode #
-    inode * currFile = &inodeTable[fileDescriptor];          // current inode for open file
+    //Step 1) Define Your Variables ---------------------------------------------------
     
+        int inodeNum = fi->fh;
+        int diskfile = getDiskFile();
     
-    //Step 1) Set variables
+        inode * NODE = &inodeTable[inodeNum];
+        // current inode for open file
     
-    int diskfile = getDiskFile();
+        int blockIndex = ((int)offset/(int)BLOCK_SIZE);
+        fprintf(stderr, "block Index  %d \n", blockIndex);
+
     
-    int currDiskBlockIndex = ((int)offset/(int)BLOCK_SIZE);   //ex. trunc(1000/512) means start at index 1
-    //(first block that current thread owns)
+        //ex. trunc(1000/512) means start at index 1
+        int byteOffset = offset % BLOCK_SIZE;
+        fprintf(stderr, "byte offset   %d \n", byteOffset);
+
     
-    int currDiskBlock = currFile->pointers[currDiskBlockIndex];  // what block to start out at in pointer list. ex 1000/512
-    //  will tell you to start at block 1
-    
-    int byteOffset = offset % BLOCK_SIZE;      //   this is where to start in that block
-    
-    int numberOfBytesWritten = 0;                //    number of bytes read in
-    
-    int numberOfBytesRemaining = size;       //     number of bytes read in
-    
-    int sizeBetween = 0;
-    
-    int buffOffset = 0;
-    
-    //Step 2) Read bytes in so long as their less than the size of the file
-    while(numberOfBytesWritten < size){
-        sizeBetween = BLOCK_SIZE - byteOffset;          //number of bytes between offset and end of block
-        
-        //check if current disk block is out of bounds. if so it cant write everything (file is too big)
-        
-        if(currDiskBlockIndex>=12){
-            return numberOfBytesWritten;
+        //try to get the block that represents this
+        int currDiskBlock = getBlock(inodeNum,blockIndex);
+        if (currDiskBlock < 0){
+            fprintf(stderr, "returning error \n", currDiskBlock);
+
+            return 0;//err
         }
-        //check if the current disk block is -1. if so then we have to find a free block
-        if(currDiskBlock == -1){
-            int currDiskBlock = getFreeBlock();
-            currFile->pointers[currDiskBlockIndex] = currDiskBlock;
+            fprintf(stderr, "got block %d \n", currDiskBlock);
+
+    
+            int bytesRemaining = size;
+    
+            int bytesWritten = 0;                //    number of bytes read in
+    
+            int numberOfBytesRemaining = size;       //     number of bytes read in
+    
+            int sizeBetween = 0;
+    
+            int buffOffset = 0;
+    
+    do{
+        sizeBetween = BLOCK_SIZE - byteOffset;
+        
+        if(sizeBetween >= bytesRemaining){
+            fprintf(stderr, "0) writing in %c  \n", *(buf));
+            fprintf(stderr, "1) writing in %c  \n", *(buf+1));
+            fprintf(stderr, "2) writing in %c  \n", *(buf+2));
+            fprintf(stderr, "3) writing in %c  \n", *(buf+3));
+            fprintf(stderr, "4) writing in %c  \n", *(buf+4));
+            fprintf(stderr, "5) writing in %c  \n", *(buf+5));
+
+            
+            
+            pwrite(diskfile, buf+buffOffset, bytesRemaining, (732+currDiskBlock)*BLOCK_SIZE);
+            bytesWritten += bytesRemaining;
+            bytesRemaining -= bytesRemaining;
+            return bytesWritten;
+        }else if (sizeBetween < bytesRemaining){
+            fprintf(stderr, "2) writing in %c \n", buf);
+
+            pwrite(diskfile, buf+buffOffset, sizeBetween, (732+currDiskBlock)*BLOCK_SIZE);
+
+            bytesWritten += sizeBetween;
+            bytesRemaining -= sizeBetween;
+            buffOffset += sizeBetween;
+            byteOffset = 0;
         }
         
-        if(sizeBetween < numberOfBytesRemaining){       //need to read all the memory in this block and move onto the next one
-            
-            /**
-             the buffer from the diskfile
-             */
-            pwrite(diskfile, buf+buffOffset, sizeBetween, currDiskBlock*BLOCK_SIZE);
-            
-            /**
-             Book Keeping
-             */
-            buffOffset+= sizeBetween; //next time you write, write from the offset on buffer
-            numberOfBytesRemaining -= sizeBetween; //how much bytes we read to the end of the block
-            byteOffset = 0;//start reading bytes from 0
-            
-            /**
-             Get the next disk block that the inode owns
-             */
-            currDiskBlockIndex++;
-            currDiskBlock = currFile->pointers[currDiskBlockIndex];
-            
-            numberOfBytesWritten+=sizeBetween;
-            
-        }else if(sizeBetween >= numberOfBytesRemaining){ //need to read numberOfBytesRemaining into the buffer
-            
-            pwrite(diskfile, buf+buffOffset, numberOfBytesRemaining, currDiskBlock*BLOCK_SIZE);
-            numberOfBytesWritten+=numberOfBytesRemaining;
-            
-            break;
-        }
-    }
+       //get nxt blck. if theres nothing there add a new one
+       blockIndex++;
+       int response = getBlock(inodeNum,blockIndex);
+       if (response >= 0){
+            currDiskBlock = response;
+       }else{
+            return bytesWritten;//err
+       }
+        
+        
+    }while(bytesRemaining != 0);
+    
     fprintf(stderr, "}\n");
-    
-    return numberOfBytesWritten;
+    return size;
 }
 
 /** Read directory
@@ -1124,14 +1189,7 @@ int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offse
     
     //Step 1. Count how much files exsist
     struct dirent temp;
-    int amount_of_elements = 0;
-    int inode_nums[31];
-    int i = 1;
-    for(i = 1;i<31;i++){//start at 1 so you dont include directory itself
-        if(rootDir.table[i].inodeNumber != -1){
-            amount_of_elements++;
-        }
-    }
+    int i;
     
     int offset_mult = 0;
     for(i = 1;i<31;i++){//start at 1 so you dont include directory itself
@@ -1232,8 +1290,8 @@ struct fuse_operations sfs_oper = {
     .getattr = sfs_getattr,     // successful/sketchy. says times function is not implemented. ask monday whats up with that
     
     //terence
-    .open = sfs_open,           //
-    .release = sfs_release,     //
+    .open = sfs_open,           // ?
+    .release = sfs_release,     // ?
     
     //kwabe
     .create = sfs_create,       // successful
@@ -1292,3 +1350,4 @@ int main(int argc, char *argv[])
     
     return fuse_stat;
 }
+  
