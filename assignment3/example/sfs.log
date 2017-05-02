@@ -1,0 +1,60 @@
+
+sfs_init()
+    conn:
+    proto_major = 7
+    proto_minor = 22
+    async_read = 1
+    max_write = 131072
+    max_readahead = 131072
+    capable = 00000ffb
+    want = 00000010
+    context:
+    fuse = 009b6520
+    uid = 0
+    gid = 0
+    pid = 0
+    private_data = 009b6010
+    logfile = 009b6030
+    diskfile = /ilab/users/osb5/os/Project_3/assignment3/testfsfile
+    umask = 00000
+
+sfs_getattr(path="/bbb.b", statbuf=0x32ad2c40)
+
+sfs_create(path="/bbb.b", mode=0100600, fi=0x332d3cf0)
+
+sfs_getattr(path="/bbb.b", statbuf=0x332d3c00)
+
+sfs_write(path="/bbb.b", buf=0x33ec3060, size=7, offset=0, fi=0x32ad2d70)
+
+sfs_release(path="/bbb.b", fi=0x332d3cf0)
+
+sfs_getattr(path="/bbb.b", statbuf=0x32ad2c40)
+
+sfs_open(path"/bbb.b", fi=0x332d3cf0)
+
+sfs_write(path="/bbb.b", buf=0x24000af0, size=4096, offset=0, fi=0x32ad2cf0)
+
+sfs_release(path="/bbb.b", fi=0x332d3cf0)
+
+sfs_getattr(path="/", statbuf=0x32ad2c10)
+
+sfs_getattr(path="/", statbuf=0x332d3c10)
+
+sfs_opendir(path="/", fi=0x32ad2c30)
+
+sfs_getattr(path="/bbb.b", statbuf=0x32ad2c40)
+
+sfs_getattr(path="/", statbuf=0x332d3c10)
+
+sfs_opendir(path="/", fi=0x32ad2c30)
+
+sfs_getattr(path="/bbb.b", statbuf=0x332d3c40)
+
+sfs_getattr(path="/", statbuf=0x32ad2c10)
+
+sfs_opendir(path="/", fi=0x332d3c30)
+sfs_unlink(path="/bbb.b")
+
+sfs_getattr(path="/", statbuf=0x32ad2c10)
+
+sfs_destroy(userdata=0x009b6010)
